@@ -1,7 +1,8 @@
+import { startInstallation as queueInstallation, useActivity } from "../services/activity";
+import type { CompanionStatus } from "../components/CompanionCard";
 import {getInstances, saveInstances} from "../services/instances";
 import NovexSelect from "../components/NovexSelect";
 import { useDialogs } from "../components/Dialogs";
-import MinecraftAccounts from "../components/MinecraftAccounts";
 import {
     useEffect,
     useState,
@@ -23,31 +24,6 @@ import {
     getRecommendedVersions,
     type MinecraftVersion
 } from "../services/minecraft";
-
-
-type InstallProgress = {
-    stage: string;
-    current: number;
-    total: number;
-    message: string;
-};
-
-
-type MinecraftInstallOptions = {
-    version: string;
-    instanceDirectory: string;
-    loader?: ModLoader;
-    loaderVersion?: string;
-};
-
-
-type MinecraftInstallResult = {
-    version: string;
-    instanceDirectory: string;
-    loader?: ModLoader;
-    loaderVersion?: string;
-    launchVersion?: string;
-};
 
 
 type InstancesProps = {
@@ -73,11 +49,10 @@ function Instances({
     }, []);
 
     const { notice } = useDialogs();
-    const [sort, setSort] = useState(localStorage.getItem('novex-instance-sort') || 'favorites');
+    const [sort, setSort] = useState(localStorage.getItem('novex-instance-sort') || 'recent');
     const [cloning, setCloning] = useState('');
     const [cloneProgress, setCloneProgress] = useState('');
     useEffect(() => window.novex.utilities.onProgress(setCloneProgress), []);
-    const sortedInstances = [...instances].sort((a,b) => sort === 'recent' ? (b.lastPlayedAt || 0)-(a.lastPlayedAt || 0) : sort === 'created' ? b.createdAt-a.createdAt : sort === 'favorites' ? Number(!!b.favorite)-Number(!!a.favorite) || a.name.localeCompare(b.name) : a.name.localeCompare(b.name));
     async function cloneInstance(instance: MinecraftInstance) {
         setCloning(instance.id); setCloneProgress('Copying instance…');
         try {
@@ -113,15 +88,17 @@ function Instances({
     const [deleting, setDeleting] =
         useState<MinecraftInstance | null>(null);
 
-    const [installing, setInstalling] =
-        useState<MinecraftInstance | null>(null);
-
-    const [installProgress, setInstallProgress] =
-        useState<InstallProgress | null>(null);
-
-    const [installError, setInstallError] =
-        useState("");
-
+    const jobs=useActivity();
+    const installing=jobs.some(job=>['queued','running'].includes(job.status));
+    const [search,setSearch]=useState('');
+    const sortedInstances = instances.filter(i=>i.name.toLowerCase().includes(search.toLowerCase())).sort((a,b) => sort === 'recent' ? (b.lastPlayedAt || 0)-(a.lastPlayedAt || 0) : sort === 'created' ? b.createdAt-a.createdAt : sort === 'favorites' ? Number(!!b.favorite)-Number(!!a.favorite) || a.name.localeCompare(b.name) : a.name.localeCompare(b.name));
+    const [companion,setCompanion]=useState<CompanionStatus|null>(null);
+    const [addCompanion,setAddCompanion]=useState(false);
+    const [loaderVersion,setLoaderVersion]=useState('');
+    const [javaPath,setJavaPath]=useState('');
+    const [javaOptions,setJavaOptions]=useState<{path:string;major:number;source:string}[]>([]);
+    useEffect(()=>{if(showCreate)void window.novex.java.list().then(setJavaOptions).catch(()=>{});},[showCreate]);
+    const [required,setRequired]=useState<number|null>(null);
     const [name, setName] =
         useState("");
 
@@ -135,6 +112,10 @@ function Instances({
         useState<string | undefined>();
 
 
+    useEffect(()=>{let alive=true;setAddCompanion(false);setCompanion(null);setRequired(null);
+        if(minecraftVersion){void window.novex.companion.status({minecraftVersion,loader}).then(value=>{if(alive)setCompanion(value);}).catch(()=>{});void window.novex.java.required(minecraftVersion).then(value=>{if(alive)setRequired(value);}).catch(()=>{});}
+        return()=>{alive=false;};
+    },[minecraftVersion,loader]);
     /*
      * ============================================================
      * LOAD MINECRAFT VERSIONS
@@ -200,32 +181,6 @@ function Instances({
      * INSTALLATION PROGRESS
      * ============================================================
      */
-
-    useEffect(() => {
-
-        if (
-            !window.novex?.minecraft?.onInstallProgress
-        ) {
-
-            return;
-
-        }
-
-        const cleanup =
-            window.novex.minecraft.onInstallProgress(
-                (progress: InstallProgress) => {
-
-                    setInstallProgress(
-                        progress
-                    );
-
-                }
-            );
-
-        return cleanup;
-
-    }, []);
-
 
     /*
      * ============================================================
@@ -300,6 +255,8 @@ function Instances({
         setName("");
 
         setLoader("vanilla");
+        setLoaderVersion("");
+        setJavaPath("");
 
         setIcon(undefined);
 
@@ -313,7 +270,7 @@ function Instances({
 
         }
 
-        setInstallError("");
+        setAddCompanion(false);
 
         setShowCreate(true);
 
@@ -350,7 +307,7 @@ function Instances({
             instance.icon
         );
 
-        setInstallError("");
+        setAddCompanion(false);
 
         setShowCreate(true);
 
@@ -585,176 +542,10 @@ function Instances({
      * ============================================================
      */
 
-    async function startInstallation(
-        instance: MinecraftInstance
-    ) {
-
-        if (
-            runningInstanceId
-        ) {
-
-            void notice(
-                "Stop Minecraft before installing or changing an instance."
-            );
-
-            return;
-
-        }
-
-
-        setInstalling(
-            instance
-        );
-
-        setInstallError("");
-
-        setInstallProgress({
-            stage: "starting",
-            current: 0,
-            total: 1,
-            message: "Starting installation..."
-        });
-
-
-        try {
-
-            const directory =
-                await window.novex
-                    .instances
-                    .getDirectory(
-                        instance
-                    );
-
-
-            /*
-             * Create the installer options.
-             */
-
-            const installOptions: MinecraftInstallOptions = {
-
-                version:
-                    instance.minecraftVersion,
-
-                loader:
-                    instance.loader,
-
-                loaderVersion:
-                    instance.loaderVersion,
-
-                instanceDirectory:
-                    directory
-
-            };
-
-
-            /*
-             * The Electron declaration currently has an older
-             * signature for minecraft.install.
-             *
-             * Cast the function itself so the full installer
-             * options can be passed safely.
-             */
-
-            const installFunction =
-                window.novex.minecraft.install as unknown as (
-                    options: MinecraftInstallOptions
-                ) => Promise<MinecraftInstallResult>;
-
-
-            const result =
-                await installFunction(
-                    installOptions
-                );
-
-
-            /*
-             * Save the loader version returned by the installer.
-             */
-
-            if (
-                result &&
-                result.loaderVersion &&
-                result.loaderVersion !==
-                    instance.loaderVersion
-            ) {
-
-                updateInstance(
-                    instance.id,
-                    {
-                        loaderVersion:
-                            result.loaderVersion
-                    }
-                );
-
-                onInstancesChanged();
-
-            }
-
-
-            setInstallProgress({
-
-                stage:
-                    "complete",
-
-                current:
-                    1,
-
-                total:
-                    1,
-
-                message:
-                    "Minecraft installation complete."
-
-            });
-
-
-            setTimeout(() => {
-
-                setInstalling(
-                    null
-                );
-
-                setInstallProgress(
-                    null
-                );
-
-            }, 1200);
-
-        } catch (error) {
-
-            if (
-                error instanceof Error &&
-                (
-                    error.name === "AbortError" ||
-                    error.message.toLowerCase().includes("aborted")
-                )
-            ) {
-
-                setInstalling(null);
-                setInstallProgress(null);
-                setInstallError("");
-
-                return;
-
-            }
-
-
-            console.error(
-                "Minecraft installation failed:",
-                error
-            );
-
-            setInstallError(
-                error instanceof Error
-                    ? error.message
-                    : "Minecraft installation failed."
-            );
-
-        }
-
+    async function startInstallation(instance:MinecraftInstance) {
+        try {if(javaPath)await window.novex.java.use(instance,javaPath);await queueInstallation({...instance,loaderVersion:loaderVersion.trim()||instance.loaderVersion},addCompanion);onInstancesChanged();}
+        catch(error){void notice(error instanceof Error?error.message:'Unable to start installation.');}
     }
-
-
     /*
      * ============================================================
      * PLAY MINECRAFT
@@ -996,10 +787,7 @@ function Instances({
                 <button
                     className="primary-button"
                     onClick={openCreate}
-                    disabled={
-                        !!runningInstanceId ||
-                        !!installing
-                    }
+                    disabled={!!runningInstanceId}
                 >
                     Create Instance
                 </button>
@@ -1007,7 +795,7 @@ function Instances({
             </div>
 
 
-            <MinecraftAccounts compact />
+            <input className="instance-search" aria-label="Search instances" placeholder="Search your instances…" value={search} onChange={e=>setSearch(e.target.value)} />
             <div className="utility-actions" style={{marginBlock:16}}><NovexSelect label="Sort instances" value={sort} options={[{value:'favorites',label:'Favorites first'},{value:'name',label:'Name'},{value:'recent',label:'Recently played'},{value:'created',label:'Recently created'}]} onChange={value=>{setSort(value);localStorage.setItem('novex-instance-sort',value);}} />{cloning && <span role="status">{cloneProgress}</span>}</div>
 
             {/* VERSION ERROR */}
@@ -1145,7 +933,7 @@ function Instances({
                                         )}
 
 
-                                        {state && (
+                                        {(state || instance.status) && (
 
                                             <div
                                                 className={
@@ -1153,9 +941,7 @@ function Instances({
                                                 }
                                             >
                                                 {
-                                                    formatState(
-                                                        state
-                                                    )
+                                                    formatState(state || (instance.status === "ready" ? "Ready" : "Needs Repair"))
                                                 }
                                             </div>
 
@@ -1188,7 +974,7 @@ function Instances({
                                                 className="primary-button"
                                                 disabled={
                                                     !!runningInstanceId ||
-                                                    !!installing
+                                                    (!!installing || instance.status === "installing" || instance.status === "repair")
                                                 }
                                                 onClick={() =>
                                                     handlePlay(
@@ -1367,6 +1153,9 @@ function Instances({
                         )}
 
 
+                        {loader !== 'vanilla' && <div className="form-group"><label>Loader version (optional)</label><input value={loaderVersion} onChange={e=>setLoaderVersion(e.target.value)} placeholder="Latest compatible version" /></div>}
+                        <section className="creation-option"><h3>Java</h3><NovexSelect label="Instance Java" value={javaPath} onChange={setJavaPath} options={[{value:"",label:"Automatic (Recommended)"},...javaOptions.map(j=>({value:j.path,label:`Java ${j.major} · ${j.source} · ${j.path}`}))]} /><p>{required?`Java ${required} will be detected or downloaded securely if needed.`:'Java requirements come from Minecraft metadata.'}</p></section>
+                        {companion?.available && <section className="creation-option"><h3>Novex Companion</h3><p>Friends, messages and badges inside Minecraft. Requires Fabric API.</p><label><input type="checkbox" checked={addCompanion} onChange={e=>setAddCompanion(e.target.checked)} /> Add Fabric API + Novex Companion</label><button type="button" onClick={()=>setAddCompanion(false)}>Later</button></section>}
                         <div className="modal-actions">
 
                             <button
@@ -1464,165 +1253,6 @@ function Instances({
             )}
 
 
-            {/* INSTALLATION */}
-
-            {installing && (
-
-                <div className="modal-background">
-
-                    <div className="modal">
-
-                        <div className="install-spinner">
-                            ↓
-                        </div>
-
-                        <h2>
-                            Installing Minecraft
-                        </h2>
-
-                        <p>
-                            Minecraft{" "}
-                            {
-                                installing.minecraftVersion
-                            }
-                        </p>
-
-                        <p>
-                            Loader:{" "}
-                            {
-                                formatLoader(
-                                    installing.loader
-                                )
-                            }
-                        </p>
-
-
-                        {installProgress && (
-
-                            <>
-
-                                <div className="progress-track">
-
-                                    <div
-                                        className="progress-bar"
-                                        style={{
-                                            width:
-                                                calculateProgress(
-                                                    installProgress
-                                                ) +
-                                                "%"
-                                        }}
-                                    />
-
-                                </div>
-
-
-                                <div className="progress-text">
-
-                                    {
-                                        installProgress.message
-                                    }
-
-                                </div>
-
-
-                                {installProgress.total > 0 && (
-
-                                    <div className="progress-details">
-
-                                        {
-                                            formatBytes(
-                                                installProgress.current
-                                            )
-                                        }
-
-                                        {" / "}
-
-                                        {
-                                            formatBytes(
-                                                installProgress.total
-                                            )
-                                        }
-
-                                    </div>
-
-                                )}
-
-                            </>
-
-                        )}
-
-
-                        {!installError && (
-
-                            <div className="modal-actions">
-
-                                <button
-                                    className="secondary-button"
-                                    onClick={async () => {
-
-                                        await window.novex.minecraft.cancelInstall();
-
-                                        setInstalling(null);
-
-                                        setInstallProgress(null);
-
-                                    }}
-                                >
-                                    Cancel Installation
-                                </button>
-
-                            </div>
-
-                        )}
-
-
-                        {installError && (
-
-                            <div className="install-error">
-
-                                <strong>
-                                    Installation failed
-                                </strong>
-
-                                <p>
-                                    {
-                                        installError
-                                    }
-                                </p>
-
-                                <button
-                                    className="secondary-button"
-                                    onClick={() => {
-
-                                        setInstalling(
-                                            null
-                                        );
-
-                                        setInstallError(
-                                            ""
-                                        );
-
-                                        setInstallProgress(
-                                            null
-                                        );
-
-                                    }}
-                                >
-                                    Close
-                                </button>
-
-                            </div>
-
-                        )}
-
-                    </div>
-
-                </div>
-
-            )}
-
-
             {/* MINECRAFT CONSOLE */}
 
             <MinecraftConsole
@@ -1677,89 +1307,6 @@ function formatState(
             return state;
 
     }
-
-}
-
-
-/*
- * ============================================================
- * CALCULATE PROGRESS
- * ============================================================
- */
-
-function calculateProgress(
-    progress: InstallProgress
-): number {
-
-    if (
-        progress.total <= 0
-    ) {
-
-        return 0;
-
-    }
-
-    return Math.min(
-        100,
-        Math.max(
-            0,
-            (
-                progress.current /
-                progress.total
-            ) * 100
-        )
-    );
-
-}
-
-
-/*
- * ============================================================
- * FORMAT BYTES
- * ============================================================
- */
-
-function formatBytes(
-    bytes: number
-): string {
-
-    if (
-        !Number.isFinite(bytes) ||
-        bytes <= 0
-    ) {
-
-        return "0 B";
-
-    }
-
-    const units = [
-        "B",
-        "KB",
-        "MB",
-        "GB"
-    ];
-
-    const index =
-        Math.floor(
-            Math.log(bytes) /
-            Math.log(1024)
-        );
-
-    const safeIndex =
-        Math.min(
-            index,
-            units.length - 1
-        );
-
-    return (
-        bytes /
-        Math.pow(
-            1024,
-            safeIndex
-        )
-    ).toFixed(1) +
-        " " +
-        units[safeIndex];
 
 }
 

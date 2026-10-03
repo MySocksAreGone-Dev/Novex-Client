@@ -1,3 +1,8 @@
+import AccountSwitcher from "./components/AccountSwitcher";
+import ActivityPanel from "./components/ActivityPanel";
+import Utilities from "./components/Utilities";
+import { useDialogs } from "./components/Dialogs";
+import { updateInstance } from "./services/instances";
 import AdminHome from "./pages/AdminHome";
 import { useHomeAdmin } from "./hooks/useHomeAdmin";
 import Settings from "./pages/Settings";
@@ -27,6 +32,7 @@ import {
 
 
 type Page =
+    | "servers" | "skins" | "capes"
     | "admin"
     | "home"
     | "instances"
@@ -42,6 +48,16 @@ type Page =
 
 function App() {
     const admin = useHomeAdmin();
+    useEffect(()=>{void window.novex.instanceStates(getInstances()).then(states=>{for(const state of states)updateInstance(state.id,{status:state.status});refreshInstances();}).catch(()=>{});},[]);
+    const {notice}=useDialogs();
+    async function play(instance:MinecraftInstance) {
+        try { const instanceDirectory=await window.novex.instances.getDirectory(instance);
+            await window.novex.minecraft.launch({instanceDirectory,version:instance.minecraftVersion,loader:instance.loader,instanceId:instance.id});
+            updateInstance(instance.id,{lastPlayedAt:Date.now()});refreshInstances();
+        } catch(error){void notice(error instanceof Error?error.message:'Unable to launch Minecraft.');}
+    }
+    useEffect(()=>{const refresh=()=>refreshInstances();window.addEventListener('novex-instances',refresh);return()=>window.removeEventListener('novex-instances',refresh);},[]);
+
 
     const [page, setPage] =
         useState<Page>("home");
@@ -161,6 +177,9 @@ function App() {
         description: string;
     }> = {
 
+        servers:{title:"Servers",description:"Your personal server favorites"},
+        skins:{title:"Skins",description:"Minecraft appearance"},
+        capes:{title:"Capes",description:"Minecraft and Novex capes"},
         admin: { title: "Admin", description: "Manage Home content" },
         home: {
             title: "Home",
@@ -253,7 +272,7 @@ function App() {
                     <div className="sidebar-section">
 
                         <div className="sidebar-section-title">
-                            Library
+                            Play
                         </div>
 
                         <NavItem
@@ -273,13 +292,14 @@ function App() {
                             onClick={() => nav("instances")}
                         />
 
+                        <NavItem icon={<LayersIcon />} label="Servers" active={page === "servers"} onClick={()=>nav("servers")} />
                     </div>
 
 
                     <div className="sidebar-section">
 
                         <div className="sidebar-section-title">
-                            Content
+                            Library
                         </div>
 
                         <NavItem
@@ -313,6 +333,7 @@ function App() {
                     </div>
 
 
+                    <div className="sidebar-section"><div className="sidebar-section-title">Customize</div><NavItem icon={<CubeIcon />} label="Skins" active={page === "skins"} onClick={()=>nav("skins")} /><NavItem icon={<LayersIcon />} label="Capes" active={page === "capes"} onClick={()=>nav("capes")} /></div>
                     <div className="sidebar-section">
 
                         <div className="sidebar-section-title">
@@ -348,52 +369,7 @@ function App() {
                     />
 
 
-                    <button
-                        className="account-card"
-                        onClick={() => nav("friends")}
-                    >
-
-                        <div className="account-avatar">
-
-                            {profile?.username
-                                ?.slice(0, 1)
-                                .toUpperCase()
-                                || "?"}
-
-                        </div>
-
-                        <div className="account-details">
-
-                            <div className="account-name">
-                                {
-                                    profile?.username ||
-                                    "Not signed in"
-                                }
-                            </div>
-
-                            <div className="account-status">
-
-                                <span
-                                    className={
-                                        profile
-                                            ? "status-dot online"
-                                            : "status-dot"
-                                    }
-                                />
-
-                                {
-                                    profile
-                                        ? "Novex account"
-                                        : "Sign in"
-                                }
-
-                            </div>
-
-                        </div>
-
-                        <ChevronIcon />
-
-                    </button>
+                    <AccountSwitcher onManage={()=>nav("settings")} />
 
                 </div>
 
@@ -422,6 +398,7 @@ function App() {
 
 
                     <div className="topbar-actions">
+                        <ActivityPanel onOpen={openInstance} onPlay={instance=>void play(instance)} />
 
                         <div className="topbar-status">
 
@@ -439,12 +416,17 @@ function App() {
                 {/* CONTENT */}
 
                 <main className="content">
+                    {page === 'servers' && <Utilities initialSection="servers-list" />}
+                    {(page === 'skins' || page === 'capes') && <section className="card appearance-shell"><h1>{page === 'skins'?'Skins':'Capes'}</h1><p>{page === 'skins'?'Your Minecraft appearance is managed through your Minecraft account. In-launcher editing is not available yet.':'Official Minecraft capes belong to your Minecraft account. Novex cannot grant Mojang capes. Custom Novex capes are planned separately.'}</p><button onClick={()=>void window.novex.openExternal('https://www.minecraft.net/msaprofile')}>Open Minecraft Profile</button></section>}
+
                     {page === "admin" && (admin ? <AdminHome /> : <p>Admin access is required.</p>)}
 
                     {page === "home" && (
 
                         <Home
                             instances={instances}
+                            username={profile?.username}
+                            onPlay={instance=>void play(instance)}
                             onOpenInstances={() =>
                                 nav("instances")
                             }
@@ -791,26 +773,6 @@ function SettingsIcon() {
             <circle cx="12" cy="12" r="3" />
             <path d="M19.4 15a1.7 1.7 0 0 0 .34 1.88l.06.06-1.42 1.42-.06-.06a1.7 1.7 0 0 0-1.88-.34 1.7 1.7 0 0 0-1 1.55V20h-2v-.09a1.7 1.7 0 0 0-1-1.55 1.7 1.7 0 0 0-1.88.34l-.06.06-1.42-1.42.06-.06A1.7 1.7 0 0 0 8.6 15a1.7 1.7 0 0 0-1.55-1H7v-2h.05a1.7 1.7 0 0 0 1.55-1 1.7 1.7 0 0 0-.34-1.88l-.06-.06 1.42-1.42.06.06a1.7 1.7 0 0 0 1.88.34 1.7 1.7 0 0 0 1-1.55V6h2v.49a1.7 1.7 0 0 0 1 1.55 1.7 1.7 0 0 0 1.88-.34l.06-.06 1.42 1.42-.06.06a1.7 1.7 0 0 0-.34 1.88 1.7 1.7 0 0 0 1.55 1H20v2h-.6a1.7 1.7 0 0 0-0 1Z" />
         </Icon>
-    );
-
-}
-
-
-function ChevronIcon() {
-
-    return (
-        <svg
-            width="16"
-            height="16"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="2"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-        >
-            <path d="m9 18 6-6-6-6" />
-        </svg>
     );
 
 }

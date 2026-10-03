@@ -1,7 +1,8 @@
+import { downloadBytes } from './transfer.js';
 import { identifyInstalledMods } from './modIdentity.js';
 import { validateModrinthVersion } from "./contentValidation.js";
 import { installMinecraft } from "./minecraftInstaller.js";
-import { secureFetch as fetch, verifyBuffer } from "./downloads.js";
+import { secureFetch as fetch } from "./downloads.js";
 import { resolveInside } from "./pathSafety.js";
 import fs from "fs/promises";
 import path from "path";
@@ -47,23 +48,7 @@ async function download(
     url, hashes
 ) {
 
-    const response =
-        await fetch(
-            url
-        );
-
-
-    if (!response.ok) {
-
-        throw new Error(
-            `Download failed: HTTP ${response.status}`
-        );
-
-    }
-
-
-    return verifyBuffer(Buffer.from(await response.arrayBuffer()), hashes);
-
+    return downloadBytes(url, hashes);
 }
 
 

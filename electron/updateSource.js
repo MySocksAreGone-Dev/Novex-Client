@@ -1,5 +1,5 @@
 import semver from 'semver';
-export const RELEASE_REPOSITORY = 'MineBukserErBorte/Novex-Client';
+export const RELEASE_REPOSITORY = 'MySocksAreGone-Dev/Novex-Client';
 export const RELEASES_URL = `https://github.com/${RELEASE_REPOSITORY}/releases`;
 export const RELEASE_API = `https://api.github.com/repos/${RELEASE_REPOSITORY}/releases/latest`;
 export function releaseVersion(current, release) {

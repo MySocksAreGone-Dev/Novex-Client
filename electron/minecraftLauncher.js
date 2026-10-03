@@ -1,9 +1,11 @@
+import { resolveJava } from './javaManager.js';
+import { readInstallState } from './installationState.js';
 import { repairMinecraftLibraries } from './minecraftInstaller.js';
 import { readVersionProfile } from './versionProfile.js';
 import launchDiagnostics from './launchDiagnostics.cjs';
 const { redact, describeError } = launchDiagnostics;
 import { fileURLToPath } from "node:url";
-import { rulesAllowed, discoverJava, launchClasspath } from "./platform.js";
+import { rulesAllowed, launchClasspath } from "./platform.js";
 import { getSettings } from "./settings.js";
 import { resolveInside, safeSegment } from "./pathSafety.js";
 import { spawn } from "child_process";
@@ -616,6 +618,8 @@ async function launchPrepared({
      */
 
     onLog?.(`[Novex] Preparing launch: ${JSON.stringify({platform:process.platform,version,loader,instanceDirectory, libraries:path.join(instanceDirectory,'libraries'),assets:path.join(instanceDirectory,'assets'),natives:path.join(instanceDirectory,'natives')})}`);
+    const installState = await readInstallState(instanceDirectory);
+    if (['installing','failed','cancelled'].includes(installState.status)) throw new Error('This instance needs repair before playing. Open its Overview and select Repair.');
     const installation =
         await readInstallationInfo(
             instanceDirectory
@@ -978,7 +982,7 @@ async function launchPrepared({
     const requiredJava = versionData.javaVersion?.majorVersion || 8;
     const selectedJava = (await getSettings()).javaPath;
     onLog?.(`[Novex] Java requirement: ${requiredJava}; selected: ${selectedJava || '(automatic discovery)'}; profile: ${launchVersion}; loader version: ${installation?.loaderVersion || '(none)'}`);
-    const java = (await discoverJava(selectedJava, requiredJava)).path;
+    const java = (await resolveJava(requiredJava, instanceDirectory, true)).path;
 
     if (jvmArguments.some(arg => /\$\{/.test(arg)) || gameArguments.some(arg => /\$\{/.test(arg))) throw new Error('The Minecraft launch profile has unsupported arguments. Repair this instance.');
     const finalArguments = [

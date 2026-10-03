@@ -17,6 +17,7 @@ export interface MinecraftInstance {
     notes?: string;
     group?: string;
     lastPlayedAt?: number;
+    status?:string;
 }
 
 const STORAGE_KEY = "novex_instances";

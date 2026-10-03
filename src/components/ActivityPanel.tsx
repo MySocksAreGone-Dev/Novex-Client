@@ -1,0 +1,17 @@
+import { useEffect,useState } from 'react';
+import { initializeActivity,useActivity } from '../services/activity';
+import { getInstances,type MinecraftInstance } from '../services/instances';
+export default function ActivityPanel({onOpen,onPlay}:{onOpen:(instance:MinecraftInstance)=>void;onPlay:(instance:MinecraftInstance)=>void}) {
+    const jobs=useActivity(),[open,setOpen]=useState(false),[error,setError]=useState('');
+    useEffect(()=>initializeActivity(),[]);
+    useEffect(()=>{const show=()=>setOpen(true);window.addEventListener('novex-show-activity',show);return()=>window.removeEventListener('novex-show-activity',show);},[]);
+    const active=jobs.filter(j=>['running','queued'].includes(j.status));
+    async function action(task:()=>Promise<unknown>){try{setError('');await task();}catch(e){setError(e instanceof Error?e.message:'Operation failed.');}}
+    return <><button className="activity-indicator" onClick={()=>setOpen(true)} aria-label="Open download activity">↓ {active.length?`${active.length} active · ${active[0].label}`:jobs.length?'Downloads':'Activity'}</button>
+        {open&&<div className="modal-background"><section className="modal activity-panel" role="dialog" aria-modal="true" aria-label="Download activity"><header className="panel-heading"><div><h2>Downloads & installations</h2><p>Close this view to keep browsing. Work continues in the background.</p></div><button className="icon-button" aria-label="Hide progress; continue downloading" onClick={()=>setOpen(false)}>×</button></header>
+        {!jobs.length&&<p className="empty-state">No downloads yet.</p>}
+        {jobs.map(job=>{const instance=getInstances().find(i=>i.id===job.instanceId);const p=job.progress;const percent=p.total?Math.min(100,Math.round((p.current||0)/p.total*100)):0;return <article className="activity-job" key={job.id}><div className="panel-heading"><strong>{job.label}</strong><span className="provider-badge">{job.status}</span></div><p>{p.message||'Queued'} {job.status==='running'&&p.total?`· ${percent}%${p.stage?' of '+p.stage:''}`:''}</p>{job.status==='running'&&<progress max={100} value={percent||undefined}/>}<small>{p.file} {p.totalBytes?`${((p.bytes||0)/1048576).toFixed(1)} / ${(p.totalBytes/1048576).toFixed(1)} MB`:''} {p.speed?`· ${(p.speed/1048576).toFixed(1)} MB/s`:''}</small>
+        {job.error&&<details><summary className="error">Unable to finish. View details</summary><p>{job.error}</p><button onClick={()=>void navigator.clipboard.writeText(job.error||'').catch(()=>setError('Unable to copy error.'))}>Copy Error</button><button onClick={()=>void window.novex.openLogs()}>Open Log</button></details>}
+        <div className="account-actions">{job.kind==='update'&&job.status==='complete'&&<button onClick={()=>void window.novex.updates.openFolder()}>Open Download Folder</button>}{job.cancellable&&['running','queued'].includes(job.status)&&<button className="danger-button" onClick={()=>void action(()=>window.novex.activity.cancel(job.id))}>Cancel Installation</button>}{['failed','cancelled'].includes(job.status)&&<button onClick={()=>void action(()=>window.novex.activity.retry(job.id))}>Retry / Repair</button>}{instance&&<button onClick={()=>{setOpen(false);onOpen(instance);}}>Open Instance</button>}{instance&&job.status==='complete'&&<button className="primary-button" onClick={()=>{setOpen(false);onPlay(instance);}}>Play</button>}</div></article>;})}{error&&<p role="alert" className="error">{error}</p>}
+        </section></div>}</>;
+}

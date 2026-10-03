@@ -13,6 +13,8 @@ export interface MinecraftAccountsState {
     busy: boolean;
 }
 export interface LauncherSettings {
+    automaticJava:boolean;
+    launchBehavior:"keep"|"minimize"|"hide";
     javaPath: string;
     instancesDirectory: string;
     dataDirectory: string;

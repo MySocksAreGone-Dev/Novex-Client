@@ -1,3 +1,5 @@
+import { resolveJava, scanJava } from './javaManager.js';
+import { checkMinecraftFiles } from './health.js';
 import { app, shell, clipboard, nativeImage } from 'electron';
 import fs from 'node:fs/promises';
 import path from 'node:path';
@@ -7,7 +9,6 @@ import { getInstanceDirectory, registeredDirectories } from './instanceManager.j
 import { resolveInside, safeSegment, assertNoSymlinks } from './pathSafety.js';
 import { directorySize, copyNewDirectory, crashHints } from './localFiles.js';
 import { getSettings, setDetectedJava } from './settings.js';
-import { listJava, discoverJava } from './platform.js';
 import { secureFetch, verifyBuffer } from './downloads.js';
 import { validateModrinthVersion } from './contentValidation.js';
 const plans = new Map();
@@ -105,8 +106,9 @@ async function health(root, instance) {
     let required=null;
     try {const data=JSON.parse(await fs.readFile(resolveInside(root,`versions/${safeSegment(instance.minecraftVersion)}/${instance.minecraftVersion}.json`),'utf8'));required=data.javaVersion?.majorVersion || 8;entries.push({name:'Minecraft metadata',detail:'Found'});}
     catch {entries.push({name:'Minecraft metadata',detail:'Missing or unreadable. Reinstall/repair the instance.'});}
-    try {const selected=(await getSettings()).javaPath;const java=required ? await discoverJava(selected,required) : (await listJava(selected,!!selected))[0];if(!java)throw new Error('Java was not found. Select an installation in Settings.');entries.push({name:'Java',detail:`Java ${java.major} detected · ${required ? 'recommended '+required : 'recommendation unavailable until Minecraft metadata is installed'} · ${java.path}`});}catch(error){entries.push({name:'Java',detail:error.message});}
+    try {const java=required ? await resolveJava(required,root) : (await scanJava())[0];if(!java)throw new Error('Java was not found. Select an installation in Settings.');entries.push({name:'Java',detail:`Java ${java.major} detected · ${required ? 'recommended '+required : 'recommendation unavailable until Minecraft metadata is installed'} · ${java.path}`});}catch(error){entries.push({name:'Java',detail:error.message});}
     for(const name of ['installation.json',`versions/${instance.minecraftVersion}/${instance.minecraftVersion}.jar`,'libraries','assets']) entries.push({name,detail:await fs.stat(resolveInside(root,name)).catch(()=>null)?'Found':'Missing — installation may be incomplete.'});
+    try {entries.push(...await checkMinecraftFiles(root,instance.minecraftVersion));}catch(error){entries.push({name:'Minecraft integrity',detail:error.message});}
     entries.push({name:'Memory',detail:'Launcher uses its existing fixed 4 GiB maximum; per-instance memory settings are not implemented.'});
     entries.push({name:'Mod compatibility',detail:'Use Check Mod Updates for exact hash identification and duplicate projects. Unknown mods cannot be validated offline.'});
     return {entries};
@@ -131,9 +133,9 @@ export async function runUtility(action, instance, input, { progress, running })
         if(instance){safeSegment(instance.minecraftVersion,'Minecraft version');if(!['vanilla','fabric','forge','neoforge','quilt'].includes(instance.loader))throw new Error('Invalid loader.');}
         const root=instance ? await getInstanceDirectory(instance) : null;
         if (['clone','backup','update','updates','restore'].includes(action) && running()) throw new Error('Stop Minecraft before copying worlds or changing mods.');
-        if(action==='java') {detectedJava=await listJava((await getSettings()).javaPath);return {entries:detectedJava.map(j=>({name:`Java ${j.major}`,detail:j.path,id:j.path}))};}
+        if(action==='java') {detectedJava=await scanJava(true);return {entries:detectedJava.map(j=>({name:`Java ${j.major}`,detail:j.path,id:j.path}))};}
         if(action==='java-select') {const match=detectedJava.find(j=>j.path===input.id);if(!match)throw new Error('Refresh Java detection first.');await setDetectedJava(match.path);return {entries:[],message:'Java selection saved for the launcher.'};}
-        if(action==='storage') {const settings=await getSettings();const dirs=await registeredDirectories();let total=0;const categories={mods:0,saves:0,screenshots:0};for(const dir of dirs){total+=await directorySize(dir);for(const key of Object.keys(categories))categories[key]+=await directorySize(resolveInside(dir,key));}return {entries:[{name:'Instances (total)',detail:settings.instancesDirectory,size:total},...Object.entries(categories).map(([name,size])=>({name,detail:'Included in instance total',size})),{name:'World backups',detail:backupsRoot(),size:await directorySize(backupsRoot())},{name:'Browser cache',detail:settings.browserCacheDirectory,size:await directorySize(settings.browserCacheDirectory)},{name:'Novex application data',detail:settings.dataDirectory,size:await directorySize(settings.dataDirectory)}],message:'Approximate sizes; categories overlap. Instance downloads remain within instance totals. No cleanup is performed.'};}
+        if(action==='storage') {const settings=await getSettings();const dirs=await registeredDirectories();let total=0;const categories={mods:0,saves:0,screenshots:0};for(const dir of dirs){total+=await directorySize(dir);for(const key of Object.keys(categories))categories[key]+=await directorySize(resolveInside(dir,key));}return {entries:[{name:'Instances (total)',detail:settings.instancesDirectory,size:total},...Object.entries(categories).map(([name,size])=>({name,detail:'Included in instance total',size})),{name:'World backups',detail:backupsRoot(),size:await directorySize(backupsRoot())},{name:'Verified download cache',detail:path.join(settings.dataDirectory,'downloads'),size:await directorySize(path.join(settings.dataDirectory,'downloads'))},{name:'Managed Java',detail:path.join(settings.dataDirectory,'runtimes'),size:await directorySize(path.join(settings.dataDirectory,'runtimes'))},{name:'Browser cache',detail:settings.browserCacheDirectory,size:await directorySize(settings.browserCacheDirectory)},{name:'Novex application data',detail:settings.dataDirectory,size:await directorySize(settings.dataDirectory)}],message:'Approximate sizes; categories overlap. Instance downloads remain within instance totals. No cleanup is performed.'};}
         if(action==='storage-open') {const settings=await getSettings();const choices={instances:settings.instancesDirectory,data:settings.dataDirectory,backups:backupsRoot()};if(!Object.hasOwn(choices,input.id))throw new Error('Invalid storage location.');await fs.mkdir(assertNoSymlinks(choices[input.id]),{recursive:true});await open(choices[input.id]);return {entries:[]};}
         if(action==='servers-list'||action==='servers-save') {
             const file=assertNoSymlinks(path.join(app.getPath('userData'),'personal-servers.json'));

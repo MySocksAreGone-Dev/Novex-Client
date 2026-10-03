@@ -1,8 +1,11 @@
+import { resolveJava } from './javaManager.js';
+import { transferContext } from './transfer.js';
+import { writeInstallState } from './installationState.js';
+import { downloadToFile, parallelFiles, checkSpace } from './transfer.js';
 import { prepareLoaderClient, neoForgeVersionPrefix } from './loaderSupport.js';
 import { secureFetch as fetch } from "./downloads.js";
-import { installNatives, applicableLibraries, downloadLibraryArtifact, ensureLibraryArtifacts } from "./natives.js";
-import { rulesAllowed, discoverJava } from "./platform.js";
-import { getSettings } from "./settings.js";
+import { installNatives, nativeArtifact, applicableLibraries, downloadLibraryArtifact, ensureLibraryArtifacts } from "./natives.js";
+import { rulesAllowed } from "./platform.js";
 import { resolveInside, safeSegment } from "./pathSafety.js";
 import fs from "fs/promises";
 import path from "path";
@@ -78,37 +81,6 @@ async function downloadText(url) {
  * ============================================================
  */
 
-async function verifySha1(
-    filePath,
-    expectedSha1
-) {
-    if (!expectedSha1) {
-        return false;
-    }
-
-    try {
-        const data =
-            await fs.readFile(
-                filePath
-            );
-
-        const hash =
-            crypto
-                .createHash("sha1")
-                .update(data)
-                .digest("hex");
-
-        return (
-            hash.toLowerCase() ===
-            expectedSha1.toLowerCase()
-        );
-
-    } catch {
-        return false;
-    }
-}
-
-
 /*
  * ============================================================
  * GENERIC FILE DOWNLOAD
@@ -131,142 +103,7 @@ async function downloadFile(
         expectedSha1 = checksum.trim().split(/\s+/)[0];
         if (!/^[a-f0-9]{40}$/i.test(expectedSha1)) throw new Error('Invalid library checksum from download server.');
     }
-    await fs.mkdir(
-        path.dirname(destination),
-        {
-            recursive: true
-        }
-    );
-
-
-    /*
-     * Reuse an already-valid file.
-     */
-
-    if (
-        expectedSha1 &&
-        await verifySha1(
-            destination,
-            expectedSha1
-        )
-    ) {
-
-        onProgress?.({
-            skipped: true,
-            downloaded: 0,
-            total: 0
-        });
-
-        return false;
-    }
-
-
-    const response =
-        await fetch(url, { signal: currentInstallController?.signal });
-
-
-    if (!response.ok) {
-        throw new Error(
-            `Failed to download ${url}: HTTP ${response.status}`
-        );
-    }
-
-
-    if (!response.body) {
-        throw new Error(
-            `No response body received from ${url}`
-        );
-    }
-
-
-    const total =
-        Number(
-            response.headers.get(
-                "content-length"
-            ) || 0
-        );
-
-
-    const reader =
-        response.body.getReader();
-
-
-    const chunks = [];
-
-    let downloaded = 0;
-
-
-    while (true) {
-
-        const {
-            done,
-            value
-        } = await reader.read();
-
-
-        if (done) {
-            break;
-        }
-
-
-        chunks.push(value);
-
-        downloaded +=
-            value.length;
-
-
-        onProgress?.({
-            skipped: false,
-            downloaded,
-            total
-        });
-
-    }
-
-
-    const buffer =
-        Buffer.concat(
-            chunks.map(
-                chunk =>
-                    Buffer.from(chunk)
-            )
-        );
-
-
-    /*
-     * Verify SHA-1 before writing the file.
-     */
-
-    if (expectedSha1) {
-
-        const hash =
-            crypto
-                .createHash("sha1")
-                .update(buffer)
-                .digest("hex");
-
-
-        if (
-            hash.toLowerCase() !==
-            expectedSha1.toLowerCase()
-        ) {
-
-            throw new Error(
-                `SHA-1 verification failed for ${url}`
-            );
-
-        }
-
-    }
-
-
-    await fs.writeFile(
-        destination,
-        buffer
-    );
-
-
-    return true;
+    return downloadToFile(url, destination, { hashes: { sha1: expectedSha1 }, signal: currentInstallController?.signal, onProgress });
 }
 
 
@@ -618,6 +455,19 @@ async function installVanilla({
         );
 
 
+    let estimated = 0;
+    const planned = [
+        { ...versionData.downloads?.client, path: `versions/${version}/${version}.jar` },
+        ...applicableLibraries(versionData.libraries || []).flatMap(library => [library.downloads?.artifact, nativeArtifact(library)].filter(Boolean)).map(artifact=>({...artifact,path:'libraries/'+artifact.path}))
+    ];
+    for(const artifact of planned) {
+        if(!Number.isFinite(artifact.size))continue;
+        const stat=await fs.stat(resolveInside(instanceDirectory,artifact.path,false)).catch(()=>null);
+        if(stat?.size!==artifact.size)estimated+=artifact.size;
+    }
+    if(versionData.assetIndex && !await fs.stat(resolveInside(instanceDirectory,`assets/indexes/${versionData.assetIndex.id}.json`)).catch(()=>null))estimated+=versionData.assetIndex.totalSize || 0;
+    await checkSpace(instanceDirectory,estimated+32*1048576);
+
     await createMinecraftDirectories(
         instanceDirectory
     );
@@ -778,11 +628,9 @@ async function installVanilla({
     let libraryNumber = 0;
 
 
-    for (
-        const library of allowedLibraries
-    ) {
+    await parallelFiles(allowedLibraries, async library => {
 
-        libraryNumber++;
+
 
 
         const artifact =
@@ -790,7 +638,7 @@ async function installVanilla({
 
 
         if (!artifact) {
-            continue;
+            return;
         }
 
 
@@ -799,20 +647,20 @@ async function installVanilla({
             stage: "libraries",
 
             current:
-                libraryNumber - 1,
+                libraryNumber,
 
             total:
                 allowedLibraries.length,
 
             message:
-                `Checking library ${libraryNumber} of ${allowedLibraries.length}...`
+                `Checking Minecraft libraries (${libraryNumber} of ${allowedLibraries.length} verified)…`
 
         });
 
 
         const downloaded =
             await downloadLibraryArtifact(library, artifact, instanceDirectory, downloadFile);
-
+        libraryNumber++;
 
         onProgress?.({
 
@@ -831,7 +679,7 @@ async function installVanilla({
 
         });
 
-    }
+    });
 
 
     /*
@@ -919,14 +767,9 @@ async function installVanilla({
         let assetNumber = 0;
 
 
-        for (
-            const [
-                _assetName,
-                asset
-            ] of assetEntries
-        ) {
+        await parallelFiles(assetEntries, async ([_assetName, asset]) => {
 
-            assetNumber++;
+
 
 
             const hash =
@@ -935,7 +778,7 @@ async function installVanilla({
 
             if (hash && !/^[a-f0-9]{40}$/i.test(hash)) throw new Error("Invalid Minecraft asset hash.");
             if (!hash) {
-                continue;
+                return;
             }
 
 
@@ -978,6 +821,7 @@ async function installVanilla({
                 );
 
 
+            assetNumber++;
             onProgress?.({
 
                 stage: "assets",
@@ -995,7 +839,7 @@ async function installVanilla({
 
             });
 
-        }
+        });
 
     }
 
@@ -1680,7 +1524,7 @@ async function runJavaInstaller({
 
     await prepareLoaderClient(instanceDirectory);
     const java =
-        (await discoverJava((await getSettings()).javaPath, currentRequiredJava)).path;
+        (await resolveJava(currentRequiredJava, instanceDirectory, true)).path;
 
 
     onProgress?.({
@@ -2662,6 +2506,10 @@ export async function installMinecraft({
 
     if (currentInstallController) throw new Error("A Minecraft installation is already running.");
     currentInstallController = new AbortController();
+    const parentSignal=transferContext.getStore()?.signal;
+    const abort=()=>currentInstallController?.abort();
+    parentSignal?.addEventListener('abort',abort,{once:true});
+    if(parentSignal?.aborted)abort();
     try {
     safeSegment(version, "Minecraft version");
     if (loaderVersion) safeSegment(loaderVersion, "loader version");
@@ -2738,7 +2586,7 @@ export async function installMinecraft({
     await createMinecraftDirectories(
         instanceDirectory
     );
-
+    await writeInstallState(instanceDirectory,{status:'installing',version,loader});
 
     onProgress?.({
 
@@ -2775,6 +2623,8 @@ export async function installMinecraft({
 
 
     currentRequiredJava = vanilla.versionData.javaVersion?.majorVersion || 8;
+    onProgress?.({stage:"java",current:0,total:1,message:`Selecting Java ${currentRequiredJava}…`});
+    await resolveJava(currentRequiredJava, instanceDirectory, true);
 
     let installedLoader =
         "vanilla";
@@ -3066,9 +2916,13 @@ export async function installMinecraft({
 
     };
 
-    currentInstallController = null;
+    currentInstallController.signal.throwIfAborted();
+    await writeInstallState(instanceDirectory,{status:'ready',version,loader});
     return result;
-    } finally { currentInstallController = null; }
+    } catch(error) {
+        await writeInstallState(instanceDirectory,{status:currentInstallController?.signal.aborted?'cancelled':'failed',version,loader,error:String(error.message).slice(0,500)}).catch(()=>{});
+        throw error;
+    } finally { parentSignal?.removeEventListener('abort',abort); currentInstallController = null; }
 }
 
 export function cancelMinecraftInstall() {

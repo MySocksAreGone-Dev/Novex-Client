@@ -1,6 +1,12 @@
+import path from 'node:path';
+import fs from 'node:fs/promises';
+import { downloadToFile } from './transfer.js';
+import { startActivity } from './activity.js';
+import { safeSegment } from './pathSafety.js';
 import { app, shell } from 'electron';
-import { RELEASE_API, RELEASES_URL, releaseVersion } from './updateSource.js';
+import { RELEASE_API, RELEASES_URL, RELEASE_REPOSITORY, releaseVersion } from './updateSource.js';
 let cached;
+let releaseData;
 let lastCheck = 0;
 let pending;
 export function checkUpdates() {
@@ -18,10 +24,11 @@ async function query() {
         const body = await response.text();
         if (body.length > 2 * 1024 * 1024) throw new Error('Release information was too large.');
         const release = JSON.parse(body);
+        releaseData = release;
         const newer = releaseVersion(current, release);
         const formats = process.platform === 'win32' ? ['.exe'] : ['.AppImage', '.rpm', '.deb'];
         const available = newer && newer.formats.some(format => formats.includes(format));
-        cached = { current, latest: newer?.latest || current, available: Boolean(available), releasesUrl: RELEASES_URL, message: newer && !available ? 'A newer release exists, but an installer for this platform is not available yet.' : '', checkedAt: Date.now() };
+        cached = { formats: newer?.formats.filter(format=>formats.includes(format)) || [], current, latest: newer?.latest || current, available: Boolean(available), releasesUrl: RELEASES_URL, message: newer && !available ? 'A newer release exists, but an installer for this platform is not available yet.' : '', checkedAt: Date.now() };
         lastCheck = Date.now();
         return cached;
     } catch (error) {
@@ -34,3 +41,20 @@ export async function openUpdate() {
     // The trusted page shows package choices and checksums. Nothing is executed.
     return shell.openExternal(`${RELEASES_URL}/tag/v${result.latest}`);
 }
+
+export async function downloadUpdate(format) {
+    const status=await checkUpdates();
+    if(!status.available || !status.formats?.includes(format))throw new Error('No verified update in this format is available.');
+    if(process.arch!=='x64')throw new Error('Use the release page to choose a supported architecture.');
+    const asset=releaseData.assets.find(a=>a.name.endsWith(format)&&/(?:x64|x86_64)/.test(a.name));
+    if(!asset || !/^sha256:[a-f0-9]{64}$/.test(asset.digest) || !Number.isSafeInteger(asset.size))throw new Error('The update has no verified checksum. Use the official release page.');
+    safeSegment(asset.name,'update filename');
+    const expected=`https://github.com/${RELEASE_REPOSITORY}/releases/download/${releaseData.tag_name}/${asset.name}`;
+    if(asset.browser_download_url!==expected)throw new Error('Unexpected update source.');
+    return startActivity({label:`Novex ${status.latest} · ${format}`,kind:'update',cancellable:true},async()=>{
+        const directory=path.join(app.getPath('userData'),'updates');await fs.mkdir(directory,{recursive:true});
+        await downloadToFile(expected,path.join(directory,asset.name),{hashes:{sha256:asset.digest.slice(7)},size:asset.size,cache:false});
+        return {downloaded:true};
+    });
+}
+export const openUpdateFolder=()=>shell.openPath(path.join(app.getPath('userData'),'updates'));

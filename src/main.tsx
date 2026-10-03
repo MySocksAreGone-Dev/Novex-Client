@@ -5,6 +5,7 @@ import ReactDOM from "react-dom/client";
 import App from "./App";
 import "./index.css";
 import "./ui.css";
+import "./redesign.css";
 
 ReactDOM.createRoot(
     document.getElementById("root")!

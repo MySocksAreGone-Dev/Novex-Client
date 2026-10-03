@@ -7,7 +7,7 @@ export type UtilityResult = { entries: UtilityEntry[]; message?: string; total?:
 const sizeLabel = (bytes: number) => bytes < 1048576 ? `${(bytes / 1024).toFixed(1)} KiB` : bytes < 1073741824 ? `${(bytes / 1048576).toFixed(1)} MiB` : `${(bytes / 1073741824).toFixed(2)} GiB`;
 const errorMessage = (error: unknown) => String(error instanceof Error ? error.message : 'Unable to complete this operation.').replace(/^Error invoking remote method '[^']+': Error: /, '');
 
-export default function Utilities({ instance, mode = 'tools', onInstancesChanged }: { instance?: MinecraftInstance; mode?: 'tools' | 'worlds' | 'screenshots'; onInstancesChanged?: () => void }) {
+export default function Utilities({ instance, mode = 'tools', initialSection='', onInstancesChanged }: { instance?: MinecraftInstance; initialSection?:string; mode?: 'tools' | 'worlds' | 'screenshots'; onInstancesChanged?: () => void }) {
     const { confirm } = useDialogs();
     const loaded = useRef('');
     const [result, setResult] = useState<UtilityResult>({ entries: [] });
@@ -51,6 +51,7 @@ export default function Utilities({ instance, mode = 'tools', onInstancesChanged
         if(await run('servers-save', {entries})) {setServerName('');setAddress('');setServerNotes('');setEditIndex(null);setSection('servers-list');}
     }
     const button = (label: string, action: string, input = {}) => <button className="secondary-button" disabled={!!busy} onClick={() => void run(action, input, !action.endsWith('-open'))}>{busy === action ? 'Working…' : label}</button>;
+    useEffect(()=>{if(initialSection)void run(initialSection);},[initialSection]);
     return <section className="card utility-panel">
         <h2>{instance ? mode === 'worlds' ? 'Worlds & backups' : mode === 'screenshots' ? 'Screenshots' : 'Instance utilities' : 'Launcher utilities'}</h2>
         <p className="utility-muted">{instance ? 'Local tools for this instance. Stop Minecraft before copying worlds or changing mods.' : 'Java selection applies to all instances. Personal servers stay local and separate from sponsored Home content.'}</p>

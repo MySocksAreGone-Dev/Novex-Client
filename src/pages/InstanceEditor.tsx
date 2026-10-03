@@ -1,3 +1,4 @@
+import InstanceOverview from "../components/InstanceOverview";
 import Utilities from "../components/Utilities";
 import ContentSource from "../components/ContentSource";
 import { useState } from "react";
@@ -8,10 +9,12 @@ import ResourcePacks from "./ResourcePacks";
 type Props = {
     instance: any;
     onBack?: () => void;
+    onPlay?:()=>void;
     onInstancesChanged?: () => void;
 };
 
 type Tab =
+    | "overview"
     | "mods"
     | "resourcepacks"
     | "shaders"
@@ -21,10 +24,10 @@ type Tab =
 
 export default function InstanceEditor({
     instance,
-    onBack, onInstancesChanged
+    onBack, onInstancesChanged, onPlay
 }: Props) {
     const [fileDirectory, setFileDirectory] = useState<"" | "shaderpacks" | "config">("");
-    const [tab, setTab] = useState<Tab>("mods");
+    const [tab, setTab] = useState<Tab>("overview");
 
     if (!instance) {
         return (
@@ -50,7 +53,7 @@ export default function InstanceEditor({
         id: Tab;
         label: string;
     }[] = [
-        {id:"tools",label:"Utilities"}, {id:"worlds",label:"Worlds"}, {id:"screenshots",label:"Screenshots"},
+        {id:"overview",label:"Overview"}, {id:"tools",label:"Utilities"}, {id:"worlds",label:"Worlds"}, {id:"screenshots",label:"Screenshots"},
         {
             id: "mods",
             label: "Mods"
@@ -273,6 +276,7 @@ export default function InstanceEditor({
                 {(tab === "tools" || tab === "worlds" || tab === "screenshots") && <Utilities key={instance.id+tab} instance={instance} mode={tab} onInstancesChanged={onInstancesChanged} />}
                 {/* MODS */}
 
+                {tab === 'overview' && <InstanceOverview instance={instance} onPlay={()=>onPlay?.()} />}
                 {tab === "mods" && (
                     <Mods
                         instances={[instance]}

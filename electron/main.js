@@ -1,8 +1,11 @@
+import { transferContext } from './transfer.js';
+import { registerLauncherFeatures } from './launcherFeatures.js';
+import { activityBusy, trackedActivity } from './activity.js';
 import { identifyInstalledMods } from './modIdentity.js';
 import launchDiagnostics from './launchDiagnostics.cjs';
 import { listInstalledMods, setModEnabled } from './fileManager.js';
 import { runUtility, utilitiesBusy } from './utilities.js';
-import { checkUpdates, openUpdate } from './updates.js';
+import { checkUpdates, openUpdate, downloadUpdate, openUpdateFolder } from './updates.js';
 import { pathToFileURL } from 'node:url';
 import { getSettings, chooseJava, resetJava, chooseInstanceStorage, setBackgroundSettings } from './settings.js';
 import { safeSegment } from './pathSafety.js';
@@ -83,11 +86,15 @@ function handle(channel, listener) {
         const expected = app.isPackaged ? pathToFileURL(path.join(__dirname, '../dist/index.html')).href : 'http://localhost:5173/';
         if (!trustedContents.has(event.sender) || event.senderFrame !== event.sender.mainFrame || event.senderFrame.url.split('#')[0] !== expected) throw new Error('Untrusted IPC sender.');
         const mutation = /^(instances:(create|delete)|minecraft:(launch|install)|fabric:|mods:(install|setEnabled)|modpacks:install|resourcepacks:install|settings:(java|storage)|files:(delete|write|rename|create))/.test(channel);
+        if (mutation && channel !== 'instances:create' && activityBusy()) throw new Error('Wait for active background tasks before modifying instance files.');
         if (mutation && togglingMod) throw new Error('Wait for the mod toggle to finish.');
         if (mutation && utilitiesBusy()) throw new Error('Wait for the current instance utility operation to finish.');
         if(mutation) activeMutations++;
         try {
             if (args.some(arg => typeof arg === 'string' && arg.length > 2 * 1024 * 1024)) throw new Error('Input is too large.');
+            if (/^(minecraft:install|mods:install|modpacks:install|resourcepacks:install)$/.test(channel)) {
+                return await trackedActivity({label:channel==='minecraft:install'?'Minecraft installation':`${args[0]?.name || 'Instance'} · ${channel.split(':')[0]}`,kind:'download'},()=>listener(event,...args));
+            }
             return await listener(event, ...args);
         } catch (error) {
             void diagnostic({ stage: channel, serviceCode: error.code || 'operation_failed' });
@@ -114,6 +121,8 @@ function launchOptions(options) {
     return { instanceDirectory: validateInstanceDirectory(options.instanceDirectory), version: options.version, loader: options.loader, loaderVersion: options.loaderVersion };
 }
 
+registerLauncherFeatures(handle, broadcast, () => launchPending || isMinecraftRunning() || activeMutations > 0 || utilitiesBusy());
+
 handle('mods:installedProjects', async (_event, instance) => [...new Set((await identifyInstalledMods(await getInstanceDirectory(instance))).map(entry=>entry.version.project_id))]);
 handle('mods:list', async (_event, instance) => listInstalledMods(await getInstanceDirectory(instance)));
 handle('mods:setEnabled', async (_event, instance, name, enabled) => {
@@ -123,7 +132,7 @@ handle('mods:setEnabled', async (_event, instance, name, enabled) => {
     finally { togglingMod = false; }
 });
 handle('utilities:run', (_event, action, instance, input) => {
-    if(activeMutations) throw new Error('Wait for the current installation or file operation to finish.');
+    if((activityBusy() || activeMutations) && !['servers-list','storage','java','storage-open'].includes(action)) throw new Error('Wait for the current installation or file operation to finish.');
     return runUtility(action, instance, input, { progress: message => broadcast('utilities:progress', message), running: () => launchPending || isMinecraftRunning() });
 });
 handle('external:open', (_event, value) => {
@@ -134,6 +143,8 @@ handle('external:open', (_event, value) => {
 });
 handle('updates:check', () => checkUpdates());
 handle('updates:open', () => openUpdate());
+handle('updates:download', (_event, format) => downloadUpdate(format));
+handle('updates:folder', () => openUpdateFolder());
 handle('settings:get', () => getSettings());
 handle('settings:java', () => chooseJava());
 handle('settings:java-reset', () => resetJava());
@@ -901,6 +912,7 @@ handle(
         instance
     ) => {
 
+        if(activityBusy(await getInstanceDirectory(instance)))throw new Error('This instance is currently installing.');
         return await createInstanceDirectory(
             instance
         );
@@ -1072,7 +1084,7 @@ handle(
 
             onProgress:
                 progress => {
-
+                    transferContext.getStore()?.progress?.(progress);
                     sendInstallProgress(
                         window,
                         progress
@@ -1126,6 +1138,7 @@ function sendInstallProgress(
 
 handle('minecraft:launch', async (_event, options) => {
     if (launchPending || isMinecraftRunning()) throw new Error('Minecraft is already starting or running.');
+    if (activityBusy()) throw new Error('Wait for active installations to finish before launching Minecraft.');
     launchPending = true;
     let identity;
     let phase = 'validate-instance';
@@ -1135,7 +1148,11 @@ handle('minecraft:launch', async (_event, options) => {
         identity = await getLaunchIdentity();
         phase = 'prepare-and-spawn';
         activeLaunch = { instanceDirectory: validated.instanceDirectory, instanceId: typeof options.instanceId === 'string' ? options.instanceId : null, accountId: identity.accountId };
-        return await launchMinecraft({ ...validated, ...identity, onLog: gameLog, onState: gameState });
+        const result = await launchMinecraft({ ...validated, ...identity, onLog: gameLog, onState: gameState });
+        const behavior=(await getSettings()).launchBehavior;
+        if(behavior==='minimize')mainWindow?.minimize();
+        if(behavior==='hide')mainWindow?.hide();
+        return result;
     } catch (error) {
         activeLaunch = null;
         // Account code already converts MSAL response errors to curated messages.

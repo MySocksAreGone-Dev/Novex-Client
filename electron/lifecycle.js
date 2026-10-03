@@ -1,3 +1,4 @@
+import { activityBusy } from './activity.js';
 import { app, BrowserWindow, Tray, Menu, Notification, dialog, nativeImage } from 'electron';
 import { isMinecraftRunning, stopMinecraft, releaseMinecraft } from './minecraftLauncher.js';
 import { getSettings } from './settings.js';
@@ -10,25 +11,25 @@ let callbacks;
 export function initializeLifecycle(options) {
     callbacks = options;
     app.on('before-quit', event => { if (!quitting && isMinecraftRunning()) { event.preventDefault(); void explicitQuit(); } });
-    app.on('window-all-closed', () => { if (!isMinecraftRunning()) app.quit(); });
+    app.on('window-all-closed', () => { if (!isMinecraftRunning() && !activityBusy()) app.quit(); });
 }
 export function attachMainWindow(win) {
     mainWindow = win;
     win.on('close', event => {
-        if (quitting || !isMinecraftRunning()) return;
+        if (quitting || (!isMinecraftRunning() && !activityBusy())) return;
         event.preventDefault();
         if (deciding) return;
         deciding = true;
         void (async () => {
             try {
                 const settings = await getSettings();
-                if (settings.backgroundMode === 'exit') { quitLeavingGame(); return; }
+                if (settings.backgroundMode === 'exit' && !activityBusy()) { quitLeavingGame(); return; }
                 ensureTray();
                 win.hide();
                 for (const other of BrowserWindow.getAllWindows()) if (other !== win) other.hide();
                 if (!notified && settings.backgroundNotification && Notification.isSupported()) {
                     notified = true;
-                    const notice = new Notification({ title: 'Novex Client', body: 'Novex is still running because Minecraft is open.' });
+                    const notice = new Notification({ title: 'Novex Client', body: 'Novex is still running for Minecraft or active downloads.' });
                     notice.on('click', openNovex); notice.show();
                 }
             } catch { win.show(); }
@@ -59,7 +60,7 @@ function ensureTray() {
 }
 export function updateLifecycle() {
     if (isMinecraftRunning() || tray) ensureTray();
-    if (!isMinecraftRunning() && mainWindow && !mainWindow.isDestroyed() && !mainWindow.isVisible()) { quitting = true; app.quit(); }
+    if (!isMinecraftRunning() && !activityBusy() && mainWindow && !mainWindow.isDestroyed() && !mainWindow.isVisible()) { quitting = true; app.quit(); }
 }
 function quitLeavingGame() { quitting = true; releaseMinecraft(); tray?.destroy(); app.quit(); }
 export async function explicitQuit() {

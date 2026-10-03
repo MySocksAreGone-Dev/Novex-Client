@@ -62,12 +62,19 @@ declare global {
     interface Window {
 
         novex: {
+            activity: { list():Promise<import('../services/activity').ActivityJob[]>; install(instance:MinecraftInstance,companion?:boolean):Promise<string>; cancel(id:string):Promise<boolean>; retry(id:string):Promise<string>; onChanged(callback:(jobs:import('../services/activity').ActivityJob[])=>void):()=>void };
+            java: { use(instance:MinecraftInstance,selected:string):Promise<void>; list():Promise<{path:string;major:number;source:string}[]>; required(version:string):Promise<number>; install(major:number):Promise<string>; choose(instance:MinecraftInstance,automatic:boolean):Promise<void> };
+            companion: { status(instance:Partial<MinecraftInstance>,force?:boolean):Promise<import('../components/CompanionCard').CompanionStatus>; install(instance:MinecraftInstance,dependencies:boolean):Promise<string>; remove(instance:MinecraftInstance):Promise<boolean> };
+            instanceStates(instances:MinecraftInstance[]):Promise<{id:string;status:string}[]>;
+            overview(instance:MinecraftInstance):Promise<{state:{status:string;error?:string};required?:number;java?:{major:number;path:string;source:string};error?:string;mods:number;customJava:string}>;
+            openLogs():Promise<string>;
             utilities: { run: (action: string, instance?: MinecraftInstance | null, input?: Record<string, unknown>) => Promise<import("../components/Utilities").UtilityResult>; onProgress: (callback: (message: string) => void) => () => void };
 
-            updates: { check: () => Promise<UpdateStatus>; open: () => Promise<void> };
+            updates: { download(format:string):Promise<string>; openFolder():Promise<string>; check: () => Promise<UpdateStatus>; open: () => Promise<void> };
             openExternal: (url: string) => Promise<void>;
             settings: {
                 get(): Promise<LauncherSettings>;
+                setLaunch(input:Pick<LauncherSettings,"automaticJava"|"launchBehavior">):Promise<LauncherSettings>;
                 chooseJava(): Promise<LauncherSettings>;
                 resetJava(): Promise<LauncherSettings>;
                 chooseStorage(): Promise<LauncherSettings>;

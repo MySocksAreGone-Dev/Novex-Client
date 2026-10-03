@@ -5,12 +5,19 @@ contextBridge.exposeInMainWorld(
     "novex",
     {
 
+        activity: { list:()=>ipcRenderer.invoke('activity:list'), install:(instance,companion=false)=>ipcRenderer.invoke('activity:install',instance,companion), cancel:id=>ipcRenderer.invoke('activity:cancel',id), retry:id=>ipcRenderer.invoke('activity:retry',id), onChanged:callback=>{const listener=(_event,jobs)=>callback(jobs);ipcRenderer.on('activity:changed',listener);return()=>ipcRenderer.removeListener('activity:changed',listener);} },
+        java: { use:(instance,selected)=>ipcRenderer.invoke('java:use',instance,selected), list:()=>ipcRenderer.invoke('java:list'), required:version=>ipcRenderer.invoke('java:requirement',version), install:major=>ipcRenderer.invoke('java:install',major), choose:(instance,automatic)=>ipcRenderer.invoke('java:choose',instance,automatic) },
+        companion: { status:(instance,force=false)=>ipcRenderer.invoke('companion:status',instance,force), install:(instance,dependencies)=>ipcRenderer.invoke('companion:install',instance,dependencies), remove:instance=>ipcRenderer.invoke('companion:remove',instance) },
+        instanceStates:instances=>ipcRenderer.invoke('instances:states',instances),
+        overview:instance=>ipcRenderer.invoke('instances:overview',instance),
+        openLogs:()=>ipcRenderer.invoke('logs:open'),
         utilities: { run: (action, instance = null, input = {}) => ipcRenderer.invoke('utilities:run', action, instance, input),
             onProgress: callback => { const listener = (_event, message) => callback(message); ipcRenderer.on('utilities:progress', listener); return () => ipcRenderer.removeListener('utilities:progress', listener); } },
         openExternal: url => ipcRenderer.invoke('external:open', url),
-        updates: { check: () => ipcRenderer.invoke('updates:check'), open: () => ipcRenderer.invoke('updates:open') },
+        updates: { download:format=>ipcRenderer.invoke('updates:download',format), openFolder:()=>ipcRenderer.invoke('updates:folder'), check: () => ipcRenderer.invoke('updates:check'), open: () => ipcRenderer.invoke('updates:open') },
         settings: {
             get: () => ipcRenderer.invoke('settings:get'),
+            setLaunch:input=>ipcRenderer.invoke('settings:launch',input),
             chooseJava: () => ipcRenderer.invoke('settings:java'),
             resetJava: () => ipcRenderer.invoke('settings:java-reset'),
             chooseStorage: () => ipcRenderer.invoke('settings:storage'),

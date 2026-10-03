@@ -45,7 +45,8 @@ export async function listJava(manual = '', onlyManual = false) {
             const { stdout, stderr } = await execute(probe, ['-XshowSettings:properties', '-version'], { timeout: 5000, windowsHide: true, maxBuffer: 65536 });
             const output = stdout + stderr;
             const major = javaMajor(output);
-            if (/os\.arch\s*=\s*(?:x86|i[3-6]86)\s/m.test(output)) continue;
+            const architecture = /os\.arch\s*=\s*(\S+)/m.exec(output)?.[1];
+            if (process.arch === 'x64' && !['amd64','x86_64','x64'].includes(architecture)) continue;
             if (major) found.push({ path: probe, major });
         } catch { /* Continue through unavailable installations. */ }
     }

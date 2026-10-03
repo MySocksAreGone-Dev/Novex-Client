@@ -9,7 +9,7 @@ export async function getSettings() {
         try { settings = JSON.parse(await fs.readFile(file(), 'utf8')); }
         catch (error) { if (error.code !== 'ENOENT') throw new Error('Launcher settings are unreadable. Restore launcher-settings.json from backup.'); settings = {}; }
     }
-    return { backgroundMode: settings.backgroundMode === 'exit' ? 'exit' : 'background', backgroundNotification: settings.backgroundNotification !== false, javaPath: settings.javaPath || '', instancesDirectory: settings.instancesDirectory || path.join(app.getPath('userData'), 'instances'), dataDirectory: app.getPath('userData'), browserCacheDirectory: path.join(app.getPath('sessionData'), 'Cache'), platform: process.platform };
+    return { automaticJava: settings.automaticJava !== false, launchBehavior: ['keep','minimize','hide'].includes(settings.launchBehavior) ? settings.launchBehavior : 'keep', backgroundMode: settings.backgroundMode === 'exit' ? 'exit' : 'background', backgroundNotification: settings.backgroundNotification !== false, javaPath: settings.javaPath || '', instancesDirectory: settings.instancesDirectory || path.join(app.getPath('userData'), 'instances'), dataDirectory: app.getPath('userData'), browserCacheDirectory: path.join(app.getPath('sessionData'), 'Cache'), platform: process.platform };
 }
 async function save(patch) {
     await getSettings();
@@ -42,3 +42,8 @@ export async function setBackgroundSettings(input) {
 }
 
 export const setDetectedJava = javaPath => save({ javaPath });
+
+export async function setLaunchSettings(input) {
+    if (!input || typeof input.automaticJava !== 'boolean' || !['keep','minimize','hide'].includes(input.launchBehavior)) throw new Error('Invalid launcher preferences.');
+    return save({automaticJava:input.automaticJava,launchBehavior:input.launchBehavior});
+}

@@ -1,6 +1,6 @@
 import crypto from 'node:crypto';
 export function verifyBuffer(buffer, hashes) {
-    const algorithm = hashes?.sha512 ? 'sha512' : hashes?.sha1 ? 'sha1' : null;
+    const algorithm = hashes?.sha512 ? 'sha512' : hashes?.sha256 ? 'sha256' : hashes?.sha1 ? 'sha1' : null;
     if (!algorithm) throw new Error('The download has no integrity hash.');
     const expected = hashes[algorithm];
     if (typeof expected !== 'string' || crypto.createHash(algorithm).update(buffer).digest('hex') !== expected.toLowerCase()) throw new Error('Download integrity verification failed. Retry the installation.');
