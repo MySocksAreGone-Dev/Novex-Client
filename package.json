@@ -1,7 +1,7 @@
 {
   "name": "Novex-client",
   "private": true,
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Novex Client, a Minecraft launcher for managing and launching Minecraft instances.",
   "author": "Wild",
   "homepage": "https://github.com/MineBukserErBorte/Novex-Client",
@@ -38,7 +38,7 @@
     "@types/react-dom": "^19.1.6",
     "@vitejs/plugin-react": "^4.6.0",
     "concurrently": "^9.2.0",
-    "electron": "^43.2.0",
+    "electron": "43.5.0",
     "electron-builder": "^26.0.12",
     "eslint": "^9.30.0",
     "eslint-plugin-react-hooks": "^5.2.0",
