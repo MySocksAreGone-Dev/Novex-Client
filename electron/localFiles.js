@@ -36,7 +36,7 @@ export async function copyNewDirectory(source, destination, progress = () => {})
 }
 export function crashHints(text) {
     const rules = [
-        [/OutOfMemoryError|Java heap space/i, 'Possible cause: Minecraft ran out of memory.'],
+        [/OutOfMemoryError|Java heap space|GC overhead limit exceeded/i, 'Possible cause: Minecraft ran out of memory.'],
         [/UnsupportedClassVersionError|class file version/i, 'Possible cause: the selected Java version is incompatible.'],
         [/requires .* which is missing|missing.*dependenc|requires.*fabric.?api/i, 'Possible cause: a required mod dependency is missing.'],
         [/incompatible mods|incompatible mod set|requires.*minecraft/i, 'Possible cause: a mod does not match this Minecraft version or loader.'],

@@ -1,0 +1,27 @@
+import NovexSelect from './NovexSelect';
+import { useEffect, useState } from 'react';
+import { useDialogs } from './Dialogs';
+import { getInstances, saveInstances, type MinecraftInstance } from '../services/instances';
+import { showActivity } from '../services/activity';
+export type ImportSource={id:string;name:string;minecraftVersion:string;loader:string;loaderVersion?:string;source:string;modCount:number;duplicate:boolean;optionalCount?:number};
+export function rememberImported(instance:MinecraftInstance){saveInstances([...getInstances(),instance]);window.dispatchEvent(new Event('novex-instances'));showActivity();}
+export default function InstanceImport({onChanged}:{onChanged:()=>void}) {
+    const [open,setOpen]=useState(false),[rows,setRows]=useState<ImportSource[]>([]),[selected,setSelected]=useState<string[]>([]),[busy,setBusy]=useState(false),[error,setError]=useState('');
+    const {confirm}=useDialogs();
+    const [includeOptional,setIncludeOptional]=useState(true);
+    async function load(task:()=>Promise<ImportSource[]>){setOpen(true);setBusy(true);setError('');try {const next=await task();setRows(next);setSelected(next.map(row=>row.id));}catch(e){setError(String(e instanceof Error?e.message:e));}finally{setBusy(false);}}
+    useEffect(()=>{
+        const over=(e:DragEvent)=>{if(e.dataTransfer?.types.includes('Files'))e.preventDefault();};
+        const drop=(e:DragEvent)=>{const file=Array.from(e.dataTransfer?.files||[]).find(f=>f.name.toLowerCase().endsWith('.mrpack'));if(file){e.preventDefault();void load(()=>window.novex.imports.drop(file));}};
+        const show=()=>setOpen(true);window.addEventListener('novex-import',show);
+        window.addEventListener('dragover',over);window.addEventListener('drop',drop);return()=>{window.removeEventListener('novex-import',show);window.removeEventListener('dragover',over);window.removeEventListener('drop',drop);};
+    },[]);
+    async function start(ids:string[]){
+        setError('');setBusy(true);
+        try {for(const row of rows.filter(row=>ids.includes(row.id))){
+            if(row.duplicate&&!await confirm(`${row.name} has already been imported. Create another independent copy?`,'Duplicate import'))continue;
+            const instance=await window.novex.imports.start(row.id,{minecraftVersion:row.minecraftVersion,loader:row.loader,loaderVersion:row.loaderVersion,includeOptional},row.duplicate);rememberImported(instance);onChanged();setRows(previous=>previous.filter(item=>item.id!==row.id));
+        }}catch(e){setError(String(e instanceof Error?e.message:e));}finally{setBusy(false);}
+    }
+    return <>{open&&<div className="modal-background"><section className="modal" role="dialog" aria-modal="true" aria-label="Import instances"><h2>Import instances</h2><p>Copy game files into Novex. Original installations remain untouched. You can also drop a .mrpack anywhere in Novex.</p><div className="utility-actions"><button disabled={busy} onClick={()=>void load(()=>window.novex.imports.choose('pack'))}>Modrinth Pack (.mrpack)</button><button disabled={busy} onClick={()=>void load(()=>window.novex.imports.detect())}>Auto Detect</button><button disabled={busy} onClick={()=>void load(()=>window.novex.imports.choose('folder'))}>Choose Folder</button></div>{error&&<p role="alert" className="utility-error">{error}</p>}{busy&&<p role="status">Preparing import…</p>}<label><input type="checkbox" checked={includeOptional} onChange={e=>setIncludeOptional(e.target.checked)}/> Include optional client files from packs</label><div style={{maxHeight:'45vh',overflowY:'auto'}}>{rows.map(row=><article className="utility-row" key={row.id}><input type="checkbox" aria-label={`Select ${row.name}`} checked={selected.includes(row.id)} onChange={e=>setSelected(old=>e.target.checked?[...old,row.id]:old.filter(id=>id!==row.id))}/><div className="utility-description"><strong>{row.name}</strong><p>{row.source} · {row.loader} {row.loaderVersion} · {row.modCount} mods{row.optionalCount?` · ${row.optionalCount} optional files`:null}</p><label>Minecraft version<input value={row.minecraftVersion} disabled={row.source!=='Minecraft folder'} placeholder="Required, e.g. 1.21.11" onChange={e=>setRows(old=>old.map(item=>item.id===row.id?{...item,minecraftVersion:e.target.value}:item))}/></label>{row.source==='Minecraft folder'&&<><NovexSelect label="Source loader" value={row.loader} options={['vanilla','fabric','quilt','forge','neoforge'].map(value=>({value,label:value}))} onChange={loader=>setRows(old=>old.map(item=>item.id===row.id?{...item,loader,loaderVersion:undefined}:item))}/>{row.loader!=='vanilla'&&<label>Loader version<input value={row.loaderVersion||''} placeholder="Exact source loader version" onChange={e=>setRows(old=>old.map(item=>item.id===row.id?{...item,loaderVersion:e.target.value}:item))}/></label>}</>}{row.duplicate&&<small>Previously imported</small>}</div><button disabled={busy||!row.minecraftVersion} onClick={()=>void start([row.id])}>Import</button></article>)}</div><div className="modal-actions"><button className="secondary-button" disabled={busy} onClick={()=>setOpen(false)}>Close</button><button disabled={busy||!rows.length||rows.some(r=>!r.minecraftVersion)} onClick={()=>void start(rows.map(r=>r.id))}>Import All</button><button className="primary-button" disabled={busy||!selected.length||rows.some(r=>selected.includes(r.id)&&!r.minecraftVersion)} onClick={()=>void start(selected)}>Import Selected</button></div></section></div>}</>;
+}

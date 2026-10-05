@@ -24,7 +24,7 @@ export async function checkSpace(directory, bytes) {
     const available = stat.bavail * stat.bsize;
     if (available < bytes) throw new Error(`Not enough storage. Required: ${Math.ceil(bytes/1048576)} MB; available: ${Math.floor(available/1048576)} MB.`);
 }
-export async function downloadToFile(url, destination, { hashes, size, signal, onProgress, cache = true } = {}) {
+export async function downloadToFile(url, destination, { hashes, size, signal, onProgress, cache = true, allowedHosts, maxBytes = Infinity } = {}) {
     const context = transferContext.getStore();
     signal ||= context?.signal;
     signal?.throwIfAborted();
@@ -43,10 +43,11 @@ export async function downloadToFile(url, destination, { hashes, size, signal, o
         let file;
         try {
             signal?.throwIfAborted();
-            const response = await secureFetch(url, { signal });
+            const response = await secureFetch(url, { signal, allowedHosts });
             if (!response.ok) { await response.body?.cancel(); const error = new Error(`${new URL(url).hostname}: HTTP ${response.status}. Retry the download.`); error.retryable = response.status === 429 || response.status >= 500; throw error; }
             if (!response.body) throw new Error('Download returned no data.');
             const total = size ?? Number(response.headers.get('content-length') || 0);
+            if(total>maxBytes){await response.body.cancel();throw new Error('Download exceeds its permitted size.');}
             await checkSpace(path.dirname(destination), total + 16 * 1048576);
             file = await fs.open(temporary, 'wx');
             const hash = crypto.createHash(algorithm);
@@ -54,6 +55,7 @@ export async function downloadToFile(url, destination, { hashes, size, signal, o
             for await (const chunk of response.body) {
                 signal?.throwIfAborted();
                 downloaded += chunk.length;
+                if(downloaded>maxBytes)throw new Error('Download exceeds its permitted size.');
                 if (size !== undefined && downloaded > size) throw new Error('Download exceeded its expected size.');
                 hash.update(chunk); await file.writeFile(chunk);
                 const now = Date.now();
@@ -91,9 +93,9 @@ export async function parallelFiles(items, action, limit=6) {
 }
 // Existing modpack/dependency code can retain its in-memory ZIP API while sharing
 // verified transfer, retry and cache behavior with Minecraft and Java.
-export async function downloadBytes(url, hashes) {
+export async function downloadBytes(url, hashes, options = {}) {
     const os=await import('node:os');
     const directory=await fs.mkdtemp(path.join(os.tmpdir(),'novex-transfer-'));
-    try {const file=path.join(directory,'download');await downloadToFile(url,file,{hashes});return await fs.readFile(file);}
+    try {const file=path.join(directory,'download');await downloadToFile(url,file,{...options,hashes});return await fs.readFile(file);}
     finally {await fs.rm(directory,{recursive:true,force:true});}
 }

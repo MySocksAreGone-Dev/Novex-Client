@@ -1,3 +1,4 @@
+import type { ImportSource } from '../components/InstanceImport';
 import type { UpdateStatus } from "../components/UpdateNotice";
 import type { MinecraftAccountsState, LauncherSettings } from "../services/minecraftAccounts";
 import type {
@@ -62,6 +63,8 @@ declare global {
     interface Window {
 
         novex: {
+            contentInstalled(instance:MinecraftInstance):Promise<{projectId:string;versionId:string;name:string}[]>;
+            imports: { choose(kind:'folder'|'pack'):Promise<ImportSource[]>; detect():Promise<ImportSource[]>; drop(file:File):Promise<ImportSource[]>; start(id:string,override:{minecraftVersion?:string;includeOptional?:boolean;loader?:string;loaderVersion?:string},duplicate:boolean):Promise<MinecraftInstance>; project(id:string,version:string):Promise<ImportSource> };
             activity: { list():Promise<import('../services/activity').ActivityJob[]>; install(instance:MinecraftInstance,companion?:boolean):Promise<string>; cancel(id:string):Promise<boolean>; retry(id:string):Promise<string>; onChanged(callback:(jobs:import('../services/activity').ActivityJob[])=>void):()=>void };
             java: { use(instance:MinecraftInstance,selected:string):Promise<void>; list():Promise<{path:string;major:number;source:string}[]>; required(version:string):Promise<number>; install(major:number):Promise<string>; choose(instance:MinecraftInstance,automatic:boolean):Promise<void> };
             companion: { status(instance:Partial<MinecraftInstance>,force?:boolean):Promise<import('../components/CompanionCard').CompanionStatus>; install(instance:MinecraftInstance,dependencies:boolean):Promise<string>; remove(instance:MinecraftInstance):Promise<boolean> };

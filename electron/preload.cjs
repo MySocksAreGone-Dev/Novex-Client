@@ -1,10 +1,12 @@
-const { contextBridge, ipcRenderer } = require("electron");
+const { contextBridge, ipcRenderer, webUtils } = require("electron");
 
 
 contextBridge.exposeInMainWorld(
     "novex",
     {
 
+        contentInstalled:instance=>ipcRenderer.invoke('content:installed',instance),
+        imports: { choose:kind=>ipcRenderer.invoke('imports:choose',kind), detect:()=>ipcRenderer.invoke('imports:detect'), drop:file=>ipcRenderer.invoke('imports:drop',webUtils.getPathForFile(file)), start:(id,override,duplicate=false)=>ipcRenderer.invoke('imports:start',id,override,duplicate), project:(id,version)=>ipcRenderer.invoke('imports:project',id,version) },
         activity: { list:()=>ipcRenderer.invoke('activity:list'), install:(instance,companion=false)=>ipcRenderer.invoke('activity:install',instance,companion), cancel:id=>ipcRenderer.invoke('activity:cancel',id), retry:id=>ipcRenderer.invoke('activity:retry',id), onChanged:callback=>{const listener=(_event,jobs)=>callback(jobs);ipcRenderer.on('activity:changed',listener);return()=>ipcRenderer.removeListener('activity:changed',listener);} },
         java: { use:(instance,selected)=>ipcRenderer.invoke('java:use',instance,selected), list:()=>ipcRenderer.invoke('java:list'), required:version=>ipcRenderer.invoke('java:requirement',version), install:major=>ipcRenderer.invoke('java:install',major), choose:(instance,automatic)=>ipcRenderer.invoke('java:choose',instance,automatic) },
         companion: { status:(instance,force=false)=>ipcRenderer.invoke('companion:status',instance,force), install:(instance,dependencies)=>ipcRenderer.invoke('companion:install',instance,dependencies), remove:instance=>ipcRenderer.invoke('companion:remove',instance) },

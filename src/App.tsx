@@ -1,3 +1,4 @@
+import InstanceImport from './components/InstanceImport';
 import AccountSwitcher from "./components/AccountSwitcher";
 import ActivityPanel from "./components/ActivityPanel";
 import Utilities from "./components/Utilities";
@@ -237,6 +238,7 @@ function App() {
     return (
 
         <div className="app-shell">
+            <InstanceImport onChanged={()=>setInstances(getInstances())} />
 
             {/* SIDEBAR */}
 

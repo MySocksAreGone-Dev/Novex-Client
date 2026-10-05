@@ -1,3 +1,4 @@
+import ProjectPage from '../components/ProjectPageView';
 import { uiError } from "../services/uiError";
 import ContentSource from "../components/ContentSource";
 import { useEffect, useState } from "react";
@@ -37,6 +38,7 @@ function ModrinthResourcePacks({
     const [packs, setPacks] =
         useState<ModrinthProject[]>([]);
 
+    const [projectId,setProjectId]=useState<string|null>(null);
     const [search, setSearch] =
         useState("");
 
@@ -198,6 +200,8 @@ function ModrinthResourcePacks({
     /*
      * NO INSTANCE
      */
+
+    if(projectId)return <ProjectPage id={projectId} instance={selectedInstance} onBack={()=>setProjectId(null)}/>;
 
     if (!selectedInstance) {
 
@@ -542,11 +546,11 @@ function ModrinthResourcePacks({
                                                 whiteSpace:
                                                     "nowrap"
                                             }}
-                                        >
+                                        ><button className="project-title-button" onClick={()=>setProjectId(pack.project_id)}>
 
                                             {pack.title}
 
-                                        </h3><span className="provider-badge">Modrinth</span>
+                                        </button></h3><span className="provider-badge">Modrinth</span><button className="secondary-button button-small" onClick={()=>setProjectId(pack.project_id)}>View project</button>
 
 
                                         <div

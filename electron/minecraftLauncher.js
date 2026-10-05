@@ -1,3 +1,4 @@
+import { readMemory } from './performance.js';
 import { resolveJava } from './javaManager.js';
 import { readInstallState } from './installationState.js';
 import { repairMinecraftLibraries } from './minecraftInstaller.js';
@@ -786,12 +787,11 @@ async function launchPrepared({
      * Novex memory settings.
      */
 
-    jvmArguments.push(
-        "-Xms1G"
-    );
+    const heapMiB=await readMemory(instanceDirectory);
+    jvmArguments.push(`-Xms${Math.min(1024,heapMiB)}M`);
 
     jvmArguments.push(
-        "-Xmx4G"
+        `-Xmx${heapMiB}M`
     );
 
 
@@ -1075,7 +1075,7 @@ async function launchPrepared({
         });
         supervisor.once('error', error => { onLog?.(`[Novex] Monitor spawn exception: ${JSON.stringify(describeError(error,[accessToken]))}`); finish('crashed', `Minecraft process monitor could not start (${error.code || error.name}).`); });
         supervisor.once('exit', () => finish('crashed', '[Novex] Minecraft process monitor exited.'));
-        supervisor.send({ type: 'launch', executable: java, args: finalArguments, cwd: instanceDirectory, secret: accessToken }, error => {
+        supervisor.send({ type: 'launch', executable: java, args: finalArguments, cwd: instanceDirectory, secret: accessToken, heapMiB }, error => {
             if (error) finish('crashed', 'Minecraft process monitor could not receive launch settings.');
         });
     });

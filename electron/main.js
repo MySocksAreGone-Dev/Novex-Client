@@ -123,6 +123,7 @@ function launchOptions(options) {
 
 registerLauncherFeatures(handle, broadcast, () => launchPending || isMinecraftRunning() || activeMutations > 0 || utilitiesBusy());
 
+handle('content:installed', async (_event,instance) => {const root=await getInstanceDirectory(instance);const entries=(await Promise.all(['mods','resourcepacks'].map(folder=>identifyInstalledMods(root,folder)))).flat();return entries.map(entry=>({projectId:entry.version.project_id,versionId:entry.version.id,name:entry.version.name}));});
 handle('mods:installedProjects', async (_event, instance) => [...new Set((await identifyInstalledMods(await getInstanceDirectory(instance))).map(entry=>entry.version.project_id))]);
 handle('mods:list', async (_event, instance) => listInstalledMods(await getInstanceDirectory(instance)));
 handle('mods:setEnabled', async (_event, instance, name, enabled) => {

@@ -1,3 +1,7 @@
+import crypto from 'node:crypto';
+import { inspectPack, installPackContent } from './packArchive.js';
+import { writeInstallState } from './installationState.js';
+import { transferContext } from './transfer.js';
 import { downloadBytes } from './transfer.js';
 import { identifyInstalledMods } from './modIdentity.js';
 import { validateModrinthVersion } from "./contentValidation.js";
@@ -516,282 +520,10 @@ export async function installModpack({
     }
 
 
-    /*
-     * adm-zip handles the .mrpack archive.
-     */
-
-    const AdmZip =
-        (
-
-            await import(
-                "adm-zip"
-            )
-
-        ).default;
-
-
-    const archive =
-        new AdmZip(
-
-            await download(
-                file.url, file.hashes
-            )
-
-        );
-
-
-    const entries =
-        archive.getEntries();
-
-
-    /*
-     * Find modrinth.index.json.
-     */
-
-    const indexEntry =
-        entries.find(
-
-            entry =>
-                entry.entryName ===
-                "modrinth.index.json"
-
-        );
-
-
-    if (!indexEntry) {
-
-        throw new Error(
-
-            "Invalid modpack: modrinth.index.json is missing."
-
-        );
-
-    }
-
-
-    const index =
-        JSON.parse(
-
-            indexEntry
-                .getData()
-                .toString(
-                    "utf8"
-                )
-
-        );
-
-
-    if (
-
-        index.formatVersion !== 1 &&
-
-        index.formatVersion !== 2
-
-    ) {
-
-        throw new Error(
-
-            `Unsupported Modrinth pack format: ${index.formatVersion}`
-
-        );
-
-    }
-
-
-    if (version.project_id !== projectId) throw new Error('Modpack version does not belong to the selected project.');
-    const dependencies = index.dependencies || {};
-    const loaderKeys = { 'fabric-loader': 'fabric', 'quilt-loader': 'quilt', forge: 'forge', neoforge: 'neoforge' };
-    const loaderKey = Object.keys(loaderKeys).find(key => dependencies[key]);
-    const packLoader = loaderKey ? loaderKeys[loaderKey] : 'vanilla';
-    if (dependencies.minecraft !== gameVersion || packLoader !== loader) throw new Error('This modpack requires a different Minecraft version or loader. Create a matching instance first.');
-    const contentPath = relative => {
-        const first = typeof relative === 'string' ? relative.replaceAll('\\', '/').split('/')[0].toLowerCase() : '';
-        if (['versions', 'libraries', 'natives', '.novex', 'instance.json', 'installation.json'].includes(first)) throw new Error('Modpack contains a protected launcher path.');
-        return safeTarget(instanceDirectory, relative);
-    };
-    for (const packFile of index.files || []) contentPath(packFile.path);
-    for (const entry of entries) {
-        const relative = entry.entryName.replace(/^(client-overrides|overrides)\//, '');
-        if (!entry.isDirectory && relative !== entry.entryName) contentPath(relative);
-    }
-    await installMinecraft({ version: gameVersion, loader, loaderVersion: loaderKey ? dependencies[loaderKey] : undefined, instanceDirectory });
-
-    /*
-     * Download files listed in
-     * modrinth.index.json.
-     */
-
-    for (
-
-        const packFile
-        of index.files || []
-
-    ) {
-
-        if (
-
-            !packFile.downloads ||
-
-            !packFile.downloads.length
-
-        ) {
-
-            continue;
-
-        }
-
-
-        const target =
-            safeTarget(
-
-                instanceDirectory,
-
-                packFile.path
-
-            );
-
-
-        await fs.mkdir(
-
-            path.dirname(
-                target
-            ),
-
-            {
-                recursive: true
-            }
-
-        );
-
-
-        await fs.writeFile(
-
-            target,
-
-            await download(
-
-                packFile.downloads[0], packFile.hashes
-
-            )
-
-        );
-
-    }
-
-
-    /*
-     * Install overrides.
-     */
-
-    for (
-
-        const entry
-        of entries
-
-    ) {
-
-        if (
-            entry.isDirectory
-        ) {
-
-            continue;
-
-        }
-
-
-        let relativePath =
-            null;
-
-
-        if (
-
-            entry.entryName.startsWith(
-                "overrides/"
-            )
-
-        ) {
-
-            relativePath =
-                entry.entryName.slice(
-
-                    "overrides/"
-                        .length
-
-                );
-
-        } else if (
-
-            entry.entryName.startsWith(
-                "client-overrides/"
-            )
-
-        ) {
-
-            relativePath =
-                entry.entryName.slice(
-
-                    "client-overrides/"
-                        .length
-
-                );
-
-        }
-
-
-        if (((entry.attr >>> 16) & 0o170000) === 0o120000) throw new Error("Modpack contains a symbolic link.");
-        if (!relativePath) {
-
-            continue;
-
-        }
-
-
-        const target =
-            safeTarget(
-
-                instanceDirectory,
-
-                relativePath
-
-            );
-
-
-        await fs.mkdir(
-
-            path.dirname(
-                target
-            ),
-
-            {
-                recursive: true
-            }
-
-        );
-
-
-        await fs.writeFile(
-
-            target,
-
-            entry.getData()
-
-        );
-
-    }
-
-
-    return {
-
-        projectId,
-
-        versionId,
-
-        name:
-            index.name ||
-            projectId
-
-    };
-
+    if (version.project_id !== projectId) throw new Error('Modpack version does not belong to this project.');
+    const pack=inspectPack(await downloadBytes(file.url,file.hashes,{maxBytes:512*1024*1024}));
+    if(pack.minecraftVersion!==gameVersion || pack.loader!==loader)throw new Error('This pack requires a different Minecraft version or loader. Create a matching instance first.');
+    return installInspectedPack(pack,instanceDirectory,{projectId,versionId});
 }
 
 
@@ -979,15 +711,45 @@ export async function installResourcePack({
         );
 
 
-    await fs.writeFile(
+    const installed=(await identifyInstalledMods(instanceDirectory,'resourcepacks')).filter(item=>item.version.project_id===projectId);
+    if(installed.length>1)throw new Error('Multiple versions of this resource pack exist. Review the resourcepacks folder first.');
+    const previous=installed[0];
+    if(previous?.version.id===version.id)return true;
+    const old=previous?safeTarget(instanceDirectory,`resourcepacks/${previous.name}`):null;
+    if(target!==old&&await fs.stat(target).catch(e=>{if(e.code==='ENOENT')return null;throw e;}))throw new Error('A file with this name already exists.');
+    const temporary=safeTarget(instanceDirectory,`resourcepacks/.novex-${crypto.randomUUID()}.tmp`);
+    const backup=safeTarget(instanceDirectory,`.novex-mod-backups/${crypto.randomUUID()}-${previous?.name||filename}`);
+    await fs.writeFile(temporary,data,{flag:'wx'});
+    try {
+        if(old){
+            const digest=crypto.createHash('sha1').update(await fs.readFile(old)).digest('hex');
+            if(digest!==previous.hash)throw new Error('The installed resource pack changed. Try again.');
+            await fs.mkdir(path.dirname(backup),{recursive:true});await fs.rename(old,backup);
+        }
+        try{await fs.link(temporary,target);}catch(error){if(old)await fs.rename(backup,old);throw error;}
+    }finally{await fs.rm(temporary,{force:true});}
 
-        target,
-
-        data
-
-    );
 
 
     return true;
 
+}
+export async function installInspectedPack(pack,instanceDirectory,identity={}) {
+    const {minecraftVersion:version,loader,loaderVersion}=pack;
+    await writeInstallState(instanceDirectory,{status:'installing',version,loader});
+    await fs.writeFile(resolveInside(instanceDirectory,'.novex-import-pending.json'),JSON.stringify({type:'modrinth-pack'}));
+    try {
+        const result=await transferContext.run({...transferContext.getStore(),deferReady:true},async()=>{
+            const result=await installMinecraft({version,loader,loaderVersion,instanceDirectory});
+            await installPackContent(pack,instanceDirectory);
+            return result;
+        });
+        transferContext.getStore()?.signal?.throwIfAborted();
+        await fs.rm(resolveInside(instanceDirectory,'.novex-import-pending.json'),{force:true});
+        await writeInstallState(instanceDirectory,{status:'ready',version,loader});
+        return {...result,...identity,name:pack.index.name};
+    } catch(error) {
+        await writeInstallState(instanceDirectory,{status:'failed',version,loader,error:String(error.message).slice(0,500)});
+        throw error;
+    }
 }

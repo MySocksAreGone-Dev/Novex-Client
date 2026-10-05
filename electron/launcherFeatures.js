@@ -1,3 +1,4 @@
+import { registerImports } from './instanceImports.js';
 import { app, shell } from 'electron';
 import path from 'node:path';
 import fs from 'node:fs/promises';
@@ -10,6 +11,7 @@ import { scanJava, requiredJava, resolveJava, installJava, chooseInstanceJava, j
 import { companionStatus, installCompanion, removeCompanion } from './companion.js';
 import { setLaunchSettings } from './settings.js';
 export function registerLauncherFeatures(handle,broadcast,running) {
+    registerImports(handle,running);
     configureDownloads(path.join(app.getPath('userData'),'downloads','verified'));
     configureActivity(jobs=>broadcast('activity:changed',jobs));
     const idle=directory=>{if(running()||activityBusy(directory))throw new Error('Stop Minecraft and wait for this instance’s active task first.');};

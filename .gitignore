@@ -83,3 +83,9 @@ supabase-session*
 /Novex-client@*
 /npm
 /npx
+
+# Local import and performance records
+import-sources.json
+.novex-import-pending.json
+.novex-performance.json
+.novex-memory.json

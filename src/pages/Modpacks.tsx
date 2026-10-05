@@ -1,3 +1,4 @@
+import ProjectPage from '../components/ProjectPageView';
 import { uiError } from "../services/uiError";
 import ContentSource from "../components/ContentSource";
 import { useEffect, useState } from "react";
@@ -26,6 +27,7 @@ function ModrinthModpacks({
     const [packs, setPacks] =
         useState<ModrinthProject[]>([]);
 
+    const [projectId,setProjectId]=useState<string|null>(null);
     const [search, setSearch] =
         useState("");
 
@@ -156,43 +158,7 @@ function ModrinthModpacks({
         }
     }
 
-    if (!instances.length) {
-        return (
-            <div className="page">
-                <div className="page-header">
-                    <div>
-                        <div className="eyebrow">
-                            CONTENT
-                        </div>
-
-                        <h1>
-                            Modpacks
-                        </h1>
-
-                        <p>
-                            Browse and install
-                            Modrinth modpacks.
-                        </p>
-                    </div>
-                </div>
-
-                <div className="empty-card">
-                    <div className="empty-icon">
-                        +
-                    </div>
-
-                    <h3>
-                        Create an instance first
-                    </h3><span className="provider-badge">Modrinth</span>
-
-                    <p>
-                        You need an instance before
-                        you can install a modpack.
-                    </p>
-                </div>
-            </div>
-        );
-    }
+    if(projectId)return <ProjectPage id={projectId} instance={selectedInstance} onBack={()=>setProjectId(null)}/>;
 
     return (
         <div className="page">
@@ -347,9 +313,9 @@ function ModrinthModpacks({
 
                                 <div className="modpack-card-title">
 
-                                    <h3 title={pack.title}>
+                                    <h3 title={pack.title}><button className="project-title-button" onClick={()=>setProjectId(pack.project_id)}>
                                         {pack.title}
-                                    </h3><span className="provider-badge">Modrinth</span>
+                                    </button></h3><span className="provider-badge">Modrinth</span><button className="secondary-button button-small" onClick={()=>setProjectId(pack.project_id)}>View project</button>
 
                                     <span>
                                         {

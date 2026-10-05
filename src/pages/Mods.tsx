@@ -1,3 +1,4 @@
+import ProjectPage from '../components/ProjectPageView';
 import InstalledMods from "../components/InstalledMods";
 import { useDialogs } from "../components/Dialogs";
 import { uiError } from "../services/uiError";
@@ -35,6 +36,7 @@ function ModrinthMods({
     const [mods, setMods] =
         useState<ModrinthProject[]>([]);
 
+    const [projectId,setProjectId]=useState<string|null>(null);
     const [search, setSearch] =
         useState("");
 
@@ -302,6 +304,8 @@ function ModrinthMods({
 
         });
 
+
+    if(projectId)return <ProjectPage id={projectId} instance={selectedInstance} onBack={()=>setProjectId(null)}/>;
 
     if (
         instances.length === 0
@@ -1096,11 +1100,11 @@ function ModrinthMods({
                                                     whiteSpace:
                                                         "nowrap"
                                                 }}
-                                            >
+                                            ><button className="project-title-button" onClick={()=>setProjectId(mod.project_id)}>
                                                 {
                                                     mod.title
                                                 }
-                                            </h3><span className="provider-badge">Modrinth</span>
+                                            </button></h3><span className="provider-badge">Modrinth</span><button className="secondary-button button-small" onClick={()=>setProjectId(mod.project_id)}>View project</button>
 
 
                                             <div

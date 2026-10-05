@@ -5,10 +5,11 @@ import {resolveInside} from './pathSafety.js';
 import {secureFetch} from './downloads.js';
 
 // Identify enabled AND disabled JARs by content, never by guessed project names.
-export async function identifyInstalledMods(root) {
-    const directory=resolveInside(root,'mods');
+export async function identifyInstalledMods(root,folder='mods') {
+    if(!['mods','resourcepacks'].includes(folder))throw new Error('Invalid content folder.');
+    const directory=resolveInside(root,folder);
     const files=(await fs.readdir(directory,{withFileTypes:true}).catch(error=>{if(error.code==='ENOENT')return [];throw error;}))
-        .filter(item=>item.isFile() && /\.jar(?:\.disabled)?$/i.test(item.name));
+        .filter(item=>item.isFile() && (folder==='mods'?/\.jar(?:\.disabled)?$/i:/\.zip$/i).test(item.name));
     if(files.length>500)throw new Error('Too many mod files for a single duplicate check (maximum 500).');
     const entries=[];
     for(const file of files) {

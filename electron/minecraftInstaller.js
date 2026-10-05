@@ -2504,6 +2504,7 @@ export async function installMinecraft({
 
 }) {
 
+    if(!transferContext.getStore()?.deferReady && await fs.stat(resolveInside(instanceDirectory,'.novex-import-pending.json')).catch(e=>{if(e.code==='ENOENT')return null;throw e;}))throw new Error('This import is incomplete. Retry its Download Activity task. After restarting Novex, import the original source again; ordinary Repair cannot complete missing pack files.');
     if (currentInstallController) throw new Error("A Minecraft installation is already running.");
     currentInstallController = new AbortController();
     const parentSignal=transferContext.getStore()?.signal;
@@ -2917,7 +2918,7 @@ export async function installMinecraft({
     };
 
     currentInstallController.signal.throwIfAborted();
-    await writeInstallState(instanceDirectory,{status:'ready',version,loader});
+    if(!transferContext.getStore()?.deferReady)await writeInstallState(instanceDirectory,{status:'ready',version,loader});
     return result;
     } catch(error) {
         await writeInstallState(instanceDirectory,{status:currentInstallController?.signal.aborted?'cancelled':'failed',version,loader,error:String(error.message).slice(0,500)}).catch(()=>{});

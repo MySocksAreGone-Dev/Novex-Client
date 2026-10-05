@@ -1,3 +1,5 @@
+import { identifyInstalledMods } from './modIdentity.js';
+import { performanceHealth, saveMemory } from './performance.js';
 import { resolveJava, scanJava } from './javaManager.js';
 import { checkMinecraftFiles } from './health.js';
 import { app, shell, clipboard, nativeImage } from 'electron';
@@ -109,7 +111,7 @@ async function health(root, instance) {
     try {const java=required ? await resolveJava(required,root) : (await scanJava())[0];if(!java)throw new Error('Java was not found. Select an installation in Settings.');entries.push({name:'Java',detail:`Java ${java.major} detected · ${required ? 'recommended '+required : 'recommendation unavailable until Minecraft metadata is installed'} · ${java.path}`});}catch(error){entries.push({name:'Java',detail:error.message});}
     for(const name of ['installation.json',`versions/${instance.minecraftVersion}/${instance.minecraftVersion}.jar`,'libraries','assets']) entries.push({name,detail:await fs.stat(resolveInside(root,name)).catch(()=>null)?'Found':'Missing — installation may be incomplete.'});
     try {entries.push(...await checkMinecraftFiles(root,instance.minecraftVersion));}catch(error){entries.push({name:'Minecraft integrity',detail:error.message});}
-    entries.push({name:'Memory',detail:'Launcher uses its existing fixed 4 GiB maximum; per-instance memory settings are not implemented.'});
+    entries.push(...(await performanceHealth(root,instance)).entries);
     entries.push({name:'Mod compatibility',detail:'Use Check Mod Updates for exact hash identification and duplicate projects. Unknown mods cannot be validated offline.'});
     return {entries};
 }
@@ -132,7 +134,7 @@ export async function runUtility(action, instance, input, { progress, running })
         if (typeof action!=='string' || !input || typeof input!=='object') throw new Error('Invalid utility request.');
         if(instance){safeSegment(instance.minecraftVersion,'Minecraft version');if(!['vanilla','fabric','forge','neoforge','quilt'].includes(instance.loader))throw new Error('Invalid loader.');}
         const root=instance ? await getInstanceDirectory(instance) : null;
-        if (['clone','backup','update','updates','restore'].includes(action) && running()) throw new Error('Stop Minecraft before copying worlds or changing mods.');
+        if (['clone','backup','update','updates','project-update','restore'].includes(action) && running()) throw new Error('Stop Minecraft before copying worlds or changing mods.');
         if(action==='java') {detectedJava=await scanJava(true);return {entries:detectedJava.map(j=>({name:`Java ${j.major}`,detail:j.path,id:j.path}))};}
         if(action==='java-select') {const match=detectedJava.find(j=>j.path===input.id);if(!match)throw new Error('Refresh Java detection first.');await setDetectedJava(match.path);return {entries:[],message:'Java selection saved for the launcher.'};}
         if(action==='storage') {const settings=await getSettings();const dirs=await registeredDirectories();let total=0;const categories={mods:0,saves:0,screenshots:0};for(const dir of dirs){total+=await directorySize(dir);for(const key of Object.keys(categories))categories[key]+=await directorySize(resolveInside(dir,key));}return {entries:[{name:'Instances (total)',detail:settings.instancesDirectory,size:total},...Object.entries(categories).map(([name,size])=>({name,detail:'Included in instance total',size})),{name:'World backups',detail:backupsRoot(),size:await directorySize(backupsRoot())},{name:'Verified download cache',detail:path.join(settings.dataDirectory,'downloads'),size:await directorySize(path.join(settings.dataDirectory,'downloads'))},{name:'Managed Java',detail:path.join(settings.dataDirectory,'runtimes'),size:await directorySize(path.join(settings.dataDirectory,'runtimes'))},{name:'Browser cache',detail:settings.browserCacheDirectory,size:await directorySize(settings.browserCacheDirectory)},{name:'Novex application data',detail:settings.dataDirectory,size:await directorySize(settings.dataDirectory)}],message:'Approximate sizes; categories overlap. Instance downloads remain within instance totals. No cleanup is performed.'};}
@@ -146,8 +148,23 @@ export async function runUtility(action, instance, input, { progress, running })
         }
         if(!root)throw new Error('Select an instance.');
         if(action==='clone') {const copy={id:crypto.randomUUID(),name:(instance.name+' Copy').slice(0,150),minecraftVersion:instance.minecraftVersion,loader:instance.loader,loaderVersion:instance.loaderVersion,createdAt:Date.now()};const destination=await getInstanceDirectory(copy);await copyNewDirectory(root,destination,progress);await fs.writeFile(resolveInside(destination,'instance.json'),JSON.stringify(copy));return {entries:[],instance:copy,message:'Instance cloned into a new directory.'};}
+        if(action==='memory-save'){if(running())throw new Error('Stop Minecraft before changing memory.');await saveMemory(root,input.heapMiB);return {entries:[],message:'Memory saved for the next launch.'};}
+        if(action==='performance'){const result=await performanceHealth(root,instance);result.entries.push(...(await crash(root)).entries);return result;}
         if(action==='health')return await health(root,instance);
         if(action==='crash')return await crash(root);
+        if(action==='project-update'){
+            if(typeof input.projectId!=='string'||typeof input.versionId!=='string'||!/^[a-zA-Z0-9]{1,80}$/.test(input.projectId)||!/^[a-zA-Z0-9]{1,80}$/.test(input.versionId))throw new Error('Invalid project version.');
+            const installed=await identifyInstalledMods(root);
+            const matches=installed.filter(item=>item.version.project_id===input.projectId);
+            if(matches.length!==1||!matches[0].enabled)throw new Error('Enable the mod and resolve duplicate versions before updating.');
+            const current=matches[0],latest=await json(`${api}/version/${input.versionId}`);
+            validateModrinthVersion(latest,input.projectId,instance.minecraftVersion,instance.loader);
+            if(installed.some(item=>(item.version.dependencies||[]).some(d=>d.dependency_type==='required'&&d.version_id===current.version.id)))throw new Error('Another installed mod requires this exact version.');
+            const dependencies=(latest.dependencies||[]).filter(d=>d.dependency_type==='required');
+            if(dependencies.some(d=>!installed.some(item=>item.enabled&&(d.version_id?item.version.id===d.version_id:item.version.project_id===d.project_id))))throw new Error('Install the required compatible dependencies first using the Dependencies tab.');
+            const id=crypto.randomUUID();plans.set(id,{root,filename:current.name,hash:current.hash,latest,instance,dependencies:installed.filter(item=>dependencies.some(d=>d.version_id?item.version.id===d.version_id:item.version.project_id===d.project_id)).map(item=>({name:item.name,hash:item.hash}))});
+            return updateMod(root,id,instance);
+        }
         if(action==='updates'){plans.clear();return await modUpdates(root,instance);}
         if(action==='update')return await updateMod(root,input.id,instance);
         if(action==='worlds') {const saves=resolveInside(root,'saves');const entries=[];for(const item of await fs.readdir(saves,{withFileTypes:true}).catch(error=>{if(error.code==='ENOENT')return [];throw error;})){if(!item.isDirectory()||item.isSymbolicLink())continue;const folder=resolveInside(saves,item.name);entries.push({name:item.name,detail:new Date((await fs.stat(folder)).mtimeMs).toLocaleString(),size:await directorySize(folder)});}return {entries};}

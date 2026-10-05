@@ -784,6 +784,7 @@ function Instances({
                 </div>
 
 
+                <button className="secondary-button" onClick={()=>window.dispatchEvent(new Event("novex-import"))}>Import</button>
                 <button
                     className="primary-button"
                     onClick={openCreate}

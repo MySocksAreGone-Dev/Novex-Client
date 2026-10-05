@@ -3,7 +3,7 @@ import { useDialogs } from './Dialogs';
 import { updateInstance, type MinecraftInstance } from '../services/instances';
 
 export type UtilityEntry = { name: string; detail: string; id?: string; size?: number; image?: string; updateId?: string; address?: string; notes?: string };
-export type UtilityResult = { entries: UtilityEntry[]; message?: string; total?: number; instance?: MinecraftInstance };
+export type UtilityResult = { heapMiB?:number; entries: UtilityEntry[]; message?: string; total?: number; instance?: MinecraftInstance };
 const sizeLabel = (bytes: number) => bytes < 1048576 ? `${(bytes / 1024).toFixed(1)} KiB` : bytes < 1073741824 ? `${(bytes / 1048576).toFixed(1)} MiB` : `${(bytes / 1073741824).toFixed(2)} GiB`;
 const errorMessage = (error: unknown) => String(error instanceof Error ? error.message : 'Unable to complete this operation.').replace(/^Error invoking remote method '[^']+': Error: /, '');
 
@@ -14,6 +14,7 @@ export default function Utilities({ instance, mode = 'tools', initialSection='',
     const [busy, setBusy] = useState('');
     const [message, setMessage] = useState('');
     const [error, setError] = useState('');
+    const [heapMiB,setHeapMiB]=useState(4096);
     const [section, setSection] = useState('');
     const [offset, setOffset] = useState(0);
     const [notes, setNotes] = useState(instance?.notes || '');
@@ -27,6 +28,7 @@ export default function Utilities({ instance, mode = 'tools', initialSection='',
         setBusy(action); setError(''); setMessage('Working…');
         try {
             const value = await window.novex.utilities.run(action, instance || null, input);
+            if(value.heapMiB)setHeapMiB(value.heapMiB);
             if (replace) { setResult(value); setSection(action); }
             setMessage(value.message || 'Done.'); return value;
         } catch (error) { setError(errorMessage(error)); setMessage(''); return null; }
@@ -56,7 +58,7 @@ export default function Utilities({ instance, mode = 'tools', initialSection='',
         <h2>{instance ? mode === 'worlds' ? 'Worlds & backups' : mode === 'screenshots' ? 'Screenshots' : 'Instance utilities' : 'Launcher utilities'}</h2>
         <p className="utility-muted">{instance ? 'Local tools for this instance. Stop Minecraft before copying worlds or changing mods.' : 'Java selection applies to all instances. Personal servers stay local and separate from sponsored Home content.'}</p>
         <div className="utility-actions">
-            {instance && mode === 'tools' && <>{button('Check Instance', 'health')}{button('Check Mod Updates', 'updates')}{button('Inspect Crash Logs', 'crash')}</>}
+            {instance && mode === 'tools' && <>{button('Check Instance', 'health')}{button('Performance Health', 'performance')}{button('Check Mod Updates', 'updates')}{button('Inspect Crash Logs', 'crash')}</>}
             {mode === 'worlds' && <>{button('Refresh Worlds', 'worlds')}{button('Open Backups', 'storage-open', {id:'backups'})}</>}
             {mode === 'screenshots' && <>{button('Refresh', 'screenshots', {offset})}{button('Open Folder', 'screenshots-open')}</>}
             {!instance && <>{button('Detect Java', 'java')}{button('Storage Usage', 'storage')}{button('Personal Servers', 'servers-list')}</>}
@@ -64,6 +66,7 @@ export default function Utilities({ instance, mode = 'tools', initialSection='',
             {section === 'crash' && <>{button('View Full Log', 'log-open')}{button('Open Reports Folder', 'crash-open')}</>}
             {section === 'storage' && <>{button('Open Instances', 'storage-open', {id:'instances'})}{button('Open Novex Data', 'storage-open', {id:'data'})}{button('Open Backups', 'storage-open', {id:'backups'})}</>}
         </div>
+        {section==='performance'&&<div className="utility-actions"><label>Memory Settings (MiB)<input type="number" min={512} max={65536} step={512} value={heapMiB} onChange={e=>setHeapMiB(Number(e.target.value))}/></label><button disabled={!!busy} onClick={async()=>{if(await confirm(`Set the Java heap limit to ${heapMiB} MiB for future launches?`,'Memory Settings'))void run('memory-save',{heapMiB},false);}}>Save Memory Limit</button>{button('View Full Log','log-open')}</div>}
         {message && <p role="status" className="utility-muted">{message}</p>}
         {error && <p role="alert" className="utility-error">{error}</p>}
         <div className={mode === 'screenshots' ? 'utility-gallery' : 'utility-list'}>

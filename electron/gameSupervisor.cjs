@@ -2,6 +2,8 @@
 // pipes so leaving Novex never closes the game's stdout/stderr readers.
 const { spawn } = require('node:child_process');
 const {redact,describeError} = require('./launchDiagnostics.cjs');
+const {monitor}=require('./processMetrics.cjs');
+let finishMetrics;
 let game;
 let stopping = false;
 let timer;
@@ -40,10 +42,11 @@ process.on('message', message => {
         });
         stream.on('end', () => { if (pending) emit(pending); });
     }
-    game.once('spawn', () => notify({ type: 'started', pid: game.pid }));
+    game.once('spawn', () => {finishMetrics=monitor(game.pid,cwd,message.heapMiB||4096);notify({ type: 'started', pid: game.pid });});
     game.once('error', error => notify({ type: 'error', code: error.code, error:describeError(error,[secret]) }));
-    game.once('close', (code, signal) => {
+    game.once('close', async (code, signal) => {
         clearTimeout(timer);
+        await finishMetrics?.(code,signal);
         notify({ type: 'closed', code, signal, stopping });
         if (process.connected) process.disconnect();
     });
