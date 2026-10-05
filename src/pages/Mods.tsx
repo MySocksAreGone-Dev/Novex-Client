@@ -1,5 +1,6 @@
+import NovexSelect from '../components/NovexSelect';
+import ContentManager from '../components/ContentManager';
 import ProjectPage from '../components/ProjectPageView';
-import InstalledMods from "../components/InstalledMods";
 import { useDialogs } from "../components/Dialogs";
 import { uiError } from "../services/uiError";
 import ContentSource from "../components/ContentSource";
@@ -363,6 +364,9 @@ function ModrinthMods({
 
 
     return (
+        <>
+        <NovexSelect label="Manage instance" value={selectedInstance!.id} onChange={setSelectedInstanceId} options={instances.map(item=>({value:item.id,label:`${item.name} · ${item.minecraftVersion} · ${item.loader}`}))}/>
+        <ContentManager key={selectedInstance!.id} instance={selectedInstance!} kind="mod" revision={installedRevision}>
 
         <div
             style={{
@@ -371,7 +375,7 @@ function ModrinthMods({
         >
 
             <p className="utility-muted">Showing {loader === "neoforge" ? "NeoForge" : loader === "forge" ? "Forge" : loader} mods for Minecraft {gameVersion}. Select the matching instance to change the loader filter.</p>
-            {selectedInstance && <InstalledMods key={selectedInstance.id} instance={selectedInstance} revision={installedRevision} />}
+
             {/* =================================================
                 HEADER
                ================================================= */}
@@ -1210,6 +1214,7 @@ function ModrinthMods({
 
         </div>
 
+        </ContentManager></>
     );
 }
 

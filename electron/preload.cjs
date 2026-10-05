@@ -5,6 +5,7 @@ contextBridge.exposeInMainWorld(
     "novex",
     {
 
+        content: { list:(instance,kind)=>ipcRenderer.invoke('content:list',instance,kind), check:(instance,kind)=>ipcRenderer.invoke('content:check',instance,kind), change:(instance,kind,names,enabled)=>ipcRenderer.invoke('content:change',instance,kind,names,enabled), delete:(instance,kind,names)=>ipcRenderer.invoke('content:delete',instance,kind,names), open:(instance,kind,name)=>ipcRenderer.invoke('content:open',instance,kind,name), update:(instance,kind,ids)=>ipcRenderer.invoke('content:update',instance,kind,ids) },
         contentInstalled:instance=>ipcRenderer.invoke('content:installed',instance),
         imports: { choose:kind=>ipcRenderer.invoke('imports:choose',kind), detect:()=>ipcRenderer.invoke('imports:detect'), drop:file=>ipcRenderer.invoke('imports:drop',webUtils.getPathForFile(file)), start:(id,override,duplicate=false)=>ipcRenderer.invoke('imports:start',id,override,duplicate), project:(id,version)=>ipcRenderer.invoke('imports:project',id,version) },
         activity: { list:()=>ipcRenderer.invoke('activity:list'), install:(instance,companion=false)=>ipcRenderer.invoke('activity:install',instance,companion), cancel:id=>ipcRenderer.invoke('activity:cancel',id), retry:id=>ipcRenderer.invoke('activity:retry',id), onChanged:callback=>{const listener=(_event,jobs)=>callback(jobs);ipcRenderer.on('activity:changed',listener);return()=>ipcRenderer.removeListener('activity:changed',listener);} },
@@ -16,7 +17,7 @@ contextBridge.exposeInMainWorld(
         utilities: { run: (action, instance = null, input = {}) => ipcRenderer.invoke('utilities:run', action, instance, input),
             onProgress: callback => { const listener = (_event, message) => callback(message); ipcRenderer.on('utilities:progress', listener); return () => ipcRenderer.removeListener('utilities:progress', listener); } },
         openExternal: url => ipcRenderer.invoke('external:open', url),
-        updates: { download:format=>ipcRenderer.invoke('updates:download',format), openFolder:()=>ipcRenderer.invoke('updates:folder'), check: () => ipcRenderer.invoke('updates:check'), open: () => ipcRenderer.invoke('updates:open') },
+        updates: { status:()=>ipcRenderer.invoke('updates:status'), later:()=>ipcRenderer.invoke('updates:later'), preferences:input=>ipcRenderer.invoke('updates:preferences',input), install:()=>ipcRenderer.invoke('updates:install'), onChanged:callback=>{const listener=(_e,value)=>callback(value);ipcRenderer.on('updates:changed',listener);return()=>ipcRenderer.removeListener('updates:changed',listener);}, download:format=>ipcRenderer.invoke('updates:download',format), openFolder:()=>ipcRenderer.invoke('updates:folder'), check: () => ipcRenderer.invoke('updates:check'), open: () => ipcRenderer.invoke('updates:open') },
         settings: {
             get: () => ipcRenderer.invoke('settings:get'),
             setLaunch:input=>ipcRenderer.invoke('settings:launch',input),
@@ -215,13 +216,13 @@ contextBridge.exposeInMainWorld(
             install: (
                 instance,
                 projectId,
-                versionId
+                versionId, kind="resourcepack"
             ) =>
                 ipcRenderer.invoke(
                     "resourcepacks:install",
                     instance,
                     projectId,
-                    versionId
+                    versionId, kind
                 )
 
         },

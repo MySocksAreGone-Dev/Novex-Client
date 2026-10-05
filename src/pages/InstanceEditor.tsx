@@ -1,6 +1,5 @@
 import InstanceOverview from "../components/InstanceOverview";
 import Utilities from "../components/Utilities";
-import ContentSource from "../components/ContentSource";
 import { useState } from "react";
 import Mods from "./Mods";
 import Files from "./Files";
@@ -295,86 +294,7 @@ export default function InstanceEditor({
 
                 {/* SHADERS */}
 
-                {tab === "shaders" && (
-                    <ContentSource kind="shader"><div
-                        style={{
-                            maxWidth: 850
-                        }}
-                    >
-
-                        <div
-                            className="card"
-                            style={{
-                                padding: 28
-                            }}
-                        >
-
-                            <div
-                                style={{
-                                    width: 46,
-                                    height: 46,
-                                    borderRadius: 12,
-                                    display: "flex",
-                                    alignItems: "center",
-                                    justifyContent: "center",
-                                    background:
-                                        "rgba(124,58,237,0.10)",
-                                    border:
-                                        "1px solid rgba(124,58,237,0.18)",
-                                    color: "#a78bfa",
-                                    marginBottom: 18
-                                }}
-                            >
-                                ◈
-                            </div>
-
-                            <h2
-                                style={{
-                                    margin: 0,
-                                    fontSize: 20
-                                }}
-                            >
-                                Shader Packs
-                            </h2>
-
-                            <p
-                                style={{
-                                    margin:
-                                        "8px 0 22px",
-                                    color:
-                                        "var(--text-muted, #888)",
-                                    fontSize: 13
-                                }}
-                            >
-                                Manage the shader packs
-                                installed in this instance.
-                            </p>
-
-                            <button
-                                type="button"
-                                onClick={() => { setFileDirectory("shaderpacks"); setTab("files"); }}
-                                style={{
-                                    height: 38,
-                                    padding: "0 15px",
-                                    borderRadius: 9,
-                                    border:
-                                        "1px solid rgba(255,255,255,0.10)",
-                                    background:
-                                        "rgba(255,255,255,0.06)",
-                                    color: "#e8e8eb",
-                                    fontSize: 12,
-                                    fontWeight: 600,
-                                    cursor: "pointer"
-                                }}
-                            >
-                                Browse Shader Files
-                            </button>
-
-                        </div>
-
-                    </div></ContentSource>
-                )}
-
+                {tab === "shaders" && <><ResourcePacks instance={instance} kind="shader"/><button className="secondary-button" onClick={()=>{setFileDirectory('shaderpacks');setTab('files');}}>Browse Shader Files</button></>}
 
                 {/* FILES */}
 

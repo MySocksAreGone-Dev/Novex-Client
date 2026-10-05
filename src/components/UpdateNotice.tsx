@@ -1,21 +1,17 @@
-import {showActivity} from '../services/activity';
-import { useEffect, useState } from 'react';
-export interface UpdateStatus { formats?:string[]; current: string; latest: string | null; available: boolean; releasesUrl: string; message: string; checkedAt: number | null; }
-export default function UpdateNotice({ settings = false }: { settings?: boolean }) {
-    const [status, setStatus] = useState<UpdateStatus | null>(null);
-    const [busy, setBusy] = useState(false);
-    const [error, setError] = useState('');
-    async function check() {
-        setBusy(true); setError('');
-        try { setStatus(await window.novex.updates.check()); } catch { setError('Update check is unavailable. Try again later.'); } finally { setBusy(false); }
-    }
-    useEffect(() => { void check(); }, []);
-    if (!settings && !status?.available) return null;
-    return <section className={status?.available ? 'update-card' : 'card launcher-settings'}>
-        <h2>{status?.available ? 'Novex Update Available' : 'Novex updates'}</h2>
-        <p>Current: v{status?.current || '…'}{status?.available && <> · Latest: v{status.latest}</>}</p>
-        {status?.available && <><p>Download the installer for your system from the official release page. Installing an update preserves Novex’s data directory and existing instance folders.</p><button className="primary-button" onClick={() => void window.novex.updates.open().catch(() => setError('The update page could not be opened. Try checking again.'))}>Release Page ↗</button>{status.formats?.map(format=><button key={format} className="primary-button" onClick={async()=>{try{await window.novex.updates.download(format);showActivity();}catch(e){setError(e instanceof Error?e.message:'Unable to download update.');}}}>Download {format}</button>)}<p>Linux: use the same package format as your current installation. Windows: run the new NSIS installer. Verify SHA256SUMS from the release before installing.</p></>}
-        {settings && <><button className="secondary-button" disabled={busy} onClick={() => void check()}>{busy ? 'Checking…' : 'Check for Updates'}</button><p role="status">{status?.message || (status && !status.available ? 'Novex is up to date.' : '')}</p></>}
-        {error && <p role="alert">{error}</p>}
-    </section>;
+import {showActivity,useActivity} from '../services/activity';
+import {useEffect,useState} from 'react';
+import NovexSelect from './NovexSelect';
+export interface UpdateStatus {formats?:string[];current:string;latest:string|null;available:boolean;releasesUrl:string;message:string;checkedAt:number|null;notes?:string;ready?:boolean;readyFormat?:string;visible?:boolean;preferred?:string|null;preferences?:{automatic:boolean;prereleases:boolean};}
+export default function UpdateNotice({settings=false}:{settings?:boolean}){
+ const [status,setStatus]=useState<UpdateStatus|null>(null),[busy,setBusy]=useState(false),[error,setError]=useState(''),[format,setFormat]=useState('');const jobs=useActivity();const downloading=jobs.some(j=>j.kind==='update'&&['queued','running'].includes(j.status));
+ useEffect(()=>{void window.novex.updates.status().then(setStatus).catch(()=>setError('Update status is unavailable.'));return window.novex.updates.onChanged(setStatus);},[]);
+ useEffect(()=>{setFormat(status?.preferred||status?.formats?.[0]||'');},[status?.preferred,status?.formats?.join(',')]);
+ async function action(task:()=>Promise<unknown>){setBusy(true);setError('');try{await task();}catch(e){setError(e instanceof Error?e.message:'Update operation failed.');}finally{setBusy(false);}}
+ if(!settings&&!status?.visible)return null;
+ const prefs=status?.preferences||{automatic:true,prereleases:false};const windows=status?.formats?.includes('.exe');
+ return <section className={status?.available?'update-card':'card launcher-settings'} aria-label="Novex updates"><h2>{status?.ready?'Update Ready':status?.available?`Novex Client ${status.latest} is available`:'Novex updates'}</h2><p>Current version: {status?.current||'…'} · Latest: {status?.latest||'Not checked'}</p>
+ {settings&&<><label><input type="checkbox" checked={prefs.automatic} disabled={busy} onChange={e=>void action(async()=>setStatus(await window.novex.updates.preferences({...prefs,automatic:e.target.checked})))}/> Automatically check for updates</label><label><input type="checkbox" checked={prefs.prereleases} disabled={busy} onChange={e=>void action(async()=>setStatus(await window.novex.updates.preferences({...prefs,prereleases:e.target.checked})))}/> Include prereleases</label><p>Last checked: {status?.checkedAt?new Date(status.checkedAt).toLocaleString():'Never'}</p><button disabled={busy} onClick={()=>void action(async()=>setStatus(await window.novex.updates.check()))}>{busy?'Checking…':'Check for Updates'}</button></>}
+ {status?.available&&!status.ready&&<>{status.notes&&<details open><summary>What’s new</summary><p style={{whiteSpace:'pre-wrap',maxHeight:180,overflowY:'auto'}}>{status.notes}</p></details>}{!status.preferred&&!windows&&<><p>Choose the format matching your installation.</p><NovexSelect label="Linux package" value={format} onChange={setFormat} options={(status.formats||[]).map(value=>({value,label:value}))}/></>}<button className="primary-button" disabled={busy||downloading||!format} onClick={()=>void action(async()=>{await window.novex.updates.download(format);showActivity();})}>{downloading?'Downloading…':'Update Novex'}</button></>}
+ {status?.ready&&<><p>Novex {status.latest} has been downloaded and verified.</p><p>{windows?'Novex will close and open the Windows installer. Complete its prompts to restart Novex.':(status.readyFormat||format)==='.AppImage'?'Close Novex, then replace your AppImage with the verified download. Your instances remain in their existing directories.':'Open the downloaded package in your system’s package installer, then restart Novex. System installation may request authentication.'}</p><button className="primary-button" disabled={busy} onClick={()=>void action(()=>window.novex.updates.install())}>{windows?'Restart & Update':(status.readyFormat||format)==='.AppImage'?'Show Downloaded AppImage':'Open Package Installer'}</button><button onClick={()=>void window.novex.updates.openFolder()}>Open Download Folder</button></>}
+ {!settings&&<button className="secondary-button" onClick={()=>void action(async()=>setStatus(await window.novex.updates.later()))}>Later</button>}{status?.message&&<p role="status">{status.message}</p>}{error&&<p role="alert">{error}</p>}</section>;
 }

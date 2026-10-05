@@ -1,3 +1,4 @@
+import ContentManager from '../components/ContentManager';
 import ProjectPage from '../components/ProjectPageView';
 import { uiError } from "../services/uiError";
 import ContentSource from "../components/ContentSource";
@@ -18,11 +19,12 @@ import type {
 
 type Props = {
     instance?: MinecraftInstance | MinecraftInstance[];
+    kind?:"resourcepack"|"shader";
 };
 
 
 function ModrinthResourcePacks({
-    instance
+    instance, kind="resourcepack"
 }: Props) {
 
     /*
@@ -75,13 +77,13 @@ function ModrinthResourcePacks({
                         search,
                         gameVersion,
                         "vanilla",
-                        "resourcepack"
+                        kind
                     )
 
                     : await browseProjects(
                         gameVersion,
                         "vanilla",
-                        "resourcepack"
+                        kind
                     );
 
             setPacks(results);
@@ -151,7 +153,7 @@ function ModrinthResourcePacks({
                     pack.project_id,
                     gameVersion,
                     "vanilla",
-                    "resourcepack"
+                    kind
                 );
 
 
@@ -173,7 +175,7 @@ function ModrinthResourcePacks({
             await window.novex.resourcepacks.install(
                 selectedInstance,
                 pack.project_id,
-                version.id
+                version.id, kind
             );
 
 
@@ -214,7 +216,7 @@ function ModrinthResourcePacks({
                     <div>
 
                         <h1>
-                            Resource Packs
+                            {kind==='shader'?'Shaders':'Resource Packs'}
                         </h1>
 
                         <p>
@@ -243,6 +245,7 @@ function ModrinthResourcePacks({
 
 
     return (
+        <ContentManager key={selectedInstance.id+kind} instance={selectedInstance} kind={kind}>
 
         <div className="page">
 
@@ -253,7 +256,7 @@ function ModrinthResourcePacks({
                 <div>
 
                     <h1>
-                        Resource Packs
+                        {kind==='shader'?'Shaders':'Resource Packs'}
                     </h1>
 
                     <p>
@@ -650,6 +653,7 @@ function ModrinthResourcePacks({
 
         </div>
 
+        </ContentManager>
     );
 
 }
@@ -685,5 +689,5 @@ function PackageIcon() {
     );
 
 }export default function ResourcePacks(props: Props) {
-    return <ContentSource kind="resourcepack"><ModrinthResourcePacks {...props} /></ContentSource>;
+    return <ContentSource kind={props.kind||"resourcepack"}><ModrinthResourcePacks {...props} /></ContentSource>;
 }

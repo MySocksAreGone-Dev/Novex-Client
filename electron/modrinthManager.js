@@ -1,3 +1,4 @@
+import { replacePackSelection, shaderSupport } from './contentConfig.js';
 import crypto from 'node:crypto';
 import { inspectPack, installPackContent } from './packArchive.js';
 import { writeInstallState } from './installationState.js';
@@ -539,7 +540,8 @@ export async function installResourcePack({
 
     versionId,
 
-    gameVersion
+    gameVersion,
+    kind="resourcepack"
 
 }) {
 
@@ -548,6 +550,10 @@ export async function installResourcePack({
      * when the UI supplied one.
      */
 
+    if(!['resourcepack','shader'].includes(kind))throw new Error('Invalid pack type.');
+    const folder=kind==='shader'?'shaderpacks':'resourcepacks';
+    const project=await json(`${API}/project/${encodeURIComponent(projectId)}`);
+    if(project.project_type!==kind)throw new Error('Project type does not match the destination.');
     let version;
 
 
@@ -593,7 +599,7 @@ export async function installResourcePack({
     }
 
 
-    validateModrinthVersion(version, projectId, gameVersion);
+    validateModrinthVersion(version, projectId, gameVersion, kind==='shader'&&await shaderSupport(instanceDirectory)?'iris':undefined);
 
     /*
      * Find the primary file.
@@ -667,7 +673,7 @@ export async function installResourcePack({
 
             instanceDirectory,
 
-            "resourcepacks"
+            folder
 
         );
 
@@ -702,7 +708,7 @@ export async function installResourcePack({
 
             path.join(
 
-                "resourcepacks",
+                folder,
 
                 filename
 
@@ -711,13 +717,13 @@ export async function installResourcePack({
         );
 
 
-    const installed=(await identifyInstalledMods(instanceDirectory,'resourcepacks')).filter(item=>item.version.project_id===projectId);
+    const installed=(await identifyInstalledMods(instanceDirectory,folder)).filter(item=>item.version.project_id===projectId);
     if(installed.length>1)throw new Error('Multiple versions of this resource pack exist. Review the resourcepacks folder first.');
     const previous=installed[0];
     if(previous?.version.id===version.id)return true;
-    const old=previous?safeTarget(instanceDirectory,`resourcepacks/${previous.name}`):null;
+    const old=previous?safeTarget(instanceDirectory,`${folder}/${previous.name}`):null;
     if(target!==old&&await fs.stat(target).catch(e=>{if(e.code==='ENOENT')return null;throw e;}))throw new Error('A file with this name already exists.');
-    const temporary=safeTarget(instanceDirectory,`resourcepacks/.novex-${crypto.randomUUID()}.tmp`);
+    const temporary=safeTarget(instanceDirectory,`${folder}/.novex-${crypto.randomUUID()}.tmp`);
     const backup=safeTarget(instanceDirectory,`.novex-mod-backups/${crypto.randomUUID()}-${previous?.name||filename}`);
     await fs.writeFile(temporary,data,{flag:'wx'});
     try {
@@ -726,7 +732,7 @@ export async function installResourcePack({
             if(digest!==previous.hash)throw new Error('The installed resource pack changed. Try again.');
             await fs.mkdir(path.dirname(backup),{recursive:true});await fs.rename(old,backup);
         }
-        try{await fs.link(temporary,target);}catch(error){if(old)await fs.rename(backup,old);throw error;}
+        let linked=false;try{await fs.link(temporary,target);linked=true;if(previous)await replacePackSelection(instanceDirectory,kind,previous.name,filename);}catch(error){if(linked)await fs.rm(target,{force:true});if(old)await fs.link(backup,old).catch(()=>{});throw error;}
     }finally{await fs.rm(temporary,{force:true});}
 
 

@@ -1,9 +1,12 @@
+import { toggleContent } from './contentConfig.js';
+import { registerContent, contentBusy } from './contentIpc.js';
+import { initializeUpdates, updateStatus, laterUpdate, updatePreferences, installUpdate } from './updates.js';
 import { transferContext } from './transfer.js';
 import { registerLauncherFeatures } from './launcherFeatures.js';
 import { activityBusy, trackedActivity } from './activity.js';
 import { identifyInstalledMods } from './modIdentity.js';
 import launchDiagnostics from './launchDiagnostics.cjs';
-import { listInstalledMods, setModEnabled } from './fileManager.js';
+import { listInstalledMods } from './fileManager.js';
 import { runUtility, utilitiesBusy } from './utilities.js';
 import { checkUpdates, openUpdate, downloadUpdate, openUpdateFolder } from './updates.js';
 import { pathToFileURL } from 'node:url';
@@ -87,6 +90,7 @@ function handle(channel, listener) {
         if (!trustedContents.has(event.sender) || event.senderFrame !== event.sender.mainFrame || event.senderFrame.url.split('#')[0] !== expected) throw new Error('Untrusted IPC sender.');
         const mutation = /^(instances:(create|delete)|minecraft:(launch|install)|fabric:|mods:(install|setEnabled)|modpacks:install|resourcepacks:install|settings:(java|storage)|files:(delete|write|rename|create))/.test(channel);
         if (mutation && channel !== 'instances:create' && activityBusy()) throw new Error('Wait for active background tasks before modifying instance files.');
+        if (mutation && contentBusy())throw new Error('Wait for the content operation to finish.');
         if (mutation && togglingMod) throw new Error('Wait for the mod toggle to finish.');
         if (mutation && utilitiesBusy()) throw new Error('Wait for the current instance utility operation to finish.');
         if(mutation) activeMutations++;
@@ -121,20 +125,23 @@ function launchOptions(options) {
     return { instanceDirectory: validateInstanceDirectory(options.instanceDirectory), version: options.version, loader: options.loader, loaderVersion: options.loaderVersion };
 }
 
-registerLauncherFeatures(handle, broadcast, () => launchPending || isMinecraftRunning() || activeMutations > 0 || utilitiesBusy());
+registerLauncherFeatures(handle, broadcast, () => launchPending || isMinecraftRunning() || activeMutations > 0 || utilitiesBusy() || contentBusy());
+registerContent(handle,()=>launchPending||isMinecraftRunning()||activeMutations>0||utilitiesBusy());
 
-handle('content:installed', async (_event,instance) => {const root=await getInstanceDirectory(instance);const entries=(await Promise.all(['mods','resourcepacks'].map(folder=>identifyInstalledMods(root,folder)))).flat();return entries.map(entry=>({projectId:entry.version.project_id,versionId:entry.version.id,name:entry.version.name}));});
+handle('content:installed', async (_event,instance) => {const root=await getInstanceDirectory(instance);const entries=(await Promise.all(['mods','resourcepacks','shaderpacks'].map(folder=>identifyInstalledMods(root,folder)))).flat();return entries.map(entry=>({projectId:entry.version.project_id,versionId:entry.version.id,name:entry.version.name}));});
 handle('mods:installedProjects', async (_event, instance) => [...new Set((await identifyInstalledMods(await getInstanceDirectory(instance))).map(entry=>entry.version.project_id))]);
 handle('mods:list', async (_event, instance) => listInstalledMods(await getInstanceDirectory(instance)));
 handle('mods:setEnabled', async (_event, instance, name, enabled) => {
     if(launchPending || isMinecraftRunning() || activeMutations > 1) throw new Error('Stop Minecraft and wait for installations before changing mods.');
     togglingMod = true;
-    try { return await setModEnabled(await getInstanceDirectory(instance), name, enabled); }
+    try { return await toggleContent(await getInstanceDirectory(instance),'mod', name, enabled); }
     finally { togglingMod = false; }
 });
 handle('utilities:run', (_event, action, instance, input) => {
-    if((activityBusy() || activeMutations) && !['servers-list','storage','java','storage-open'].includes(action)) throw new Error('Wait for the current installation or file operation to finish.');
-    return runUtility(action, instance, input, { progress: message => broadcast('utilities:progress', message), running: () => launchPending || isMinecraftRunning() });
+    if((activityBusy() || activeMutations || contentBusy()) && !['servers-list','storage','java','storage-open'].includes(action)) throw new Error('Wait for the current installation or file operation to finish.');
+    const run=()=>runUtility(action, instance, input, { progress: message => broadcast('utilities:progress', message), running: () => launchPending || isMinecraftRunning() });
+    if(['update','project-update'].includes(action))return trackedActivity({label:`${instance?.name || 'Instance'} · mod update`,instanceId:instance?.id,kind:'content'},run);
+    return run();
 });
 handle('external:open', (_event, value) => {
     if (typeof value !== 'string' || value.length > 2048 || /[\u0000-\u0020\u007f]/.test(value)) throw new Error('Invalid link.');
@@ -142,7 +149,11 @@ handle('external:open', (_event, value) => {
     if (url.protocol !== 'https:' || url.username || url.password) throw new Error('Only HTTPS links are allowed.');
     return shell.openExternal(url.href);
 });
-handle('updates:check', () => checkUpdates());
+handle('updates:check', () => checkUpdates(true));
+handle('updates:status',()=>updateStatus());
+handle('updates:later',()=>laterUpdate());
+handle('updates:preferences',(_event,input)=>updatePreferences(input));
+handle('updates:install',()=>installUpdate(()=>launchPending||isMinecraftRunning()||activeMutations>0||utilitiesBusy()||contentBusy()));
 handle('updates:open', () => openUpdate());
 handle('updates:download', (_event, format) => downloadUpdate(format));
 handle('updates:folder', () => openUpdateFolder());
@@ -1518,9 +1529,11 @@ handle(
         _event,
         instance,
         projectId,
-        versionId
+        versionId,
+        kind="resourcepack"
     ) => {
 
+        if(!['resourcepack','shader'].includes(kind))throw new Error('Invalid pack type.');
         const root =
             await getInstanceDirectory(
                 instance
@@ -1532,7 +1545,7 @@ handle(
             instanceDirectory:
                 root,
 
-            projectId,
+            projectId, kind,
 
             versionId,
 
@@ -1552,6 +1565,7 @@ handle(
 
 app.whenReady().then(() => {
     if (!primaryInstance) return;
+    initializeUpdates(broadcast);
     // Register and verify the callback handler immediately before interactive login.
 
     createWindow();

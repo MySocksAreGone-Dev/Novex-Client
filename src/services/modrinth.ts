@@ -90,7 +90,7 @@ export async function searchProjects(
     projectType:
         | "mod"
         | "modpack"
-        | "resourcepack" = "mod",
+        | "resourcepack" | "shader" = "mod",
 
     limit = 24
 
@@ -194,7 +194,7 @@ export async function browseProjects(
     projectType:
         | "mod"
         | "modpack"
-        | "resourcepack" = "mod",
+        | "resourcepack" | "shader" = "mod",
 
     limit = 24
 
@@ -232,7 +232,7 @@ export async function getProjectVersions(
     projectType:
         | "mod"
         | "modpack"
-        | "resourcepack" = "mod"
+        | "resourcepack" | "shader" = "mod"
 
 ): Promise<ModrinthVersion[]> {
 

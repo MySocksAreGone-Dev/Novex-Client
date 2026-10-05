@@ -63,6 +63,8 @@ declare global {
     interface Window {
 
         novex: {
+            content: { list(instance:MinecraftInstance,kind:import('../components/ContentManager').ContentKind):Promise<import('../components/ContentManager').ContentList>; check(instance:MinecraftInstance,kind:import('../components/ContentManager').ContentKind):Promise<import('../components/ContentManager').ContentList>; change(instance:MinecraftInstance,kind:import('../components/ContentManager').ContentKind,names:string[],enabled:boolean):Promise<import('../components/ContentManager').ContentList>; delete(instance:MinecraftInstance,kind:import('../components/ContentManager').ContentKind,names:string[]):Promise<import('../components/ContentManager').ContentList>; open(instance:MinecraftInstance,kind:import('../components/ContentManager').ContentKind,name:string):Promise<void>; update(instance:MinecraftInstance,kind:import('../components/ContentManager').ContentKind,ids:string[]):Promise<string> };
+
             contentInstalled(instance:MinecraftInstance):Promise<{projectId:string;versionId:string;name:string}[]>;
             imports: { choose(kind:'folder'|'pack'):Promise<ImportSource[]>; detect():Promise<ImportSource[]>; drop(file:File):Promise<ImportSource[]>; start(id:string,override:{minecraftVersion?:string;includeOptional?:boolean;loader?:string;loaderVersion?:string},duplicate:boolean):Promise<MinecraftInstance>; project(id:string,version:string):Promise<ImportSource> };
             activity: { list():Promise<import('../services/activity').ActivityJob[]>; install(instance:MinecraftInstance,companion?:boolean):Promise<string>; cancel(id:string):Promise<boolean>; retry(id:string):Promise<string>; onChanged(callback:(jobs:import('../services/activity').ActivityJob[])=>void):()=>void };
@@ -73,7 +75,7 @@ declare global {
             openLogs():Promise<string>;
             utilities: { run: (action: string, instance?: MinecraftInstance | null, input?: Record<string, unknown>) => Promise<import("../components/Utilities").UtilityResult>; onProgress: (callback: (message: string) => void) => () => void };
 
-            updates: { download(format:string):Promise<string>; openFolder():Promise<string>; check: () => Promise<UpdateStatus>; open: () => Promise<void> };
+            updates: { status():Promise<UpdateStatus>; later():Promise<UpdateStatus>; preferences(input:{automatic:boolean;prereleases:boolean}):Promise<UpdateStatus>; install():Promise<void>; onChanged(callback:(status:UpdateStatus)=>void):()=>void; download(format:string):Promise<string>; openFolder():Promise<string>; check: () => Promise<UpdateStatus>; open: () => Promise<void> };
             openExternal: (url: string) => Promise<void>;
             settings: {
                 get(): Promise<LauncherSettings>;
@@ -291,7 +293,8 @@ declare global {
                         string,
 
                     versionId:
-                        string
+                        string,
+                    kind?:"resourcepack"|"shader"
 
                 ): Promise<boolean>;
 
