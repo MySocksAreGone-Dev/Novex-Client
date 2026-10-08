@@ -63,6 +63,7 @@ declare global {
     interface Window {
 
         novex: {
+            appearance: import("../services/appearance").AppearanceAPI;
             content: { list(instance:MinecraftInstance,kind:import('../components/ContentManager').ContentKind):Promise<import('../components/ContentManager').ContentList>; check(instance:MinecraftInstance,kind:import('../components/ContentManager').ContentKind):Promise<import('../components/ContentManager').ContentList>; change(instance:MinecraftInstance,kind:import('../components/ContentManager').ContentKind,names:string[],enabled:boolean):Promise<import('../components/ContentManager').ContentList>; delete(instance:MinecraftInstance,kind:import('../components/ContentManager').ContentKind,names:string[]):Promise<import('../components/ContentManager').ContentList>; open(instance:MinecraftInstance,kind:import('../components/ContentManager').ContentKind,name:string):Promise<void>; update(instance:MinecraftInstance,kind:import('../components/ContentManager').ContentKind,ids:string[]):Promise<string> };
 
             contentInstalled(instance:MinecraftInstance):Promise<{projectId:string;versionId:string;name:string}[]>;

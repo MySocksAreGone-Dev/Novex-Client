@@ -1,3 +1,4 @@
+import AppearancePage from './pages/Appearance';
 import UpdateNotice from './components/UpdateNotice';
 import InstanceImport from './components/InstanceImport';
 import AccountSwitcher from "./components/AccountSwitcher";
@@ -421,7 +422,7 @@ function App() {
                 <main className="content">
                     {page!=='settings'&&<UpdateNotice/>}
                     {page === 'servers' && <Utilities initialSection="servers-list" />}
-                    {(page === 'skins' || page === 'capes') && <section className="card appearance-shell"><h1>{page === 'skins'?'Skins':'Capes'}</h1><p>{page === 'skins'?'Your Minecraft appearance is managed through your Minecraft account. In-launcher editing is not available yet.':'Official Minecraft capes belong to your Minecraft account. Novex cannot grant Mojang capes. Custom Novex capes are planned separately.'}</p><button onClick={()=>void window.novex.openExternal('https://www.minecraft.net/msaprofile')}>Open Minecraft Profile</button></section>}
+                    {(page === 'skins' || page === 'capes') && <AppearancePage key={page} kind={page} onManage={()=>nav('settings')}/> }
 
                     {page === "admin" && (admin ? <AdminHome /> : <p>Admin access is required.</p>)}
 

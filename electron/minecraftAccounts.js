@@ -157,3 +157,28 @@ export const getLaunchIdentity = () => exclusive(async controller => {
     const session = await refresh(account.id, controller, () => {});
     return { ...session, accountId: account.id };
 });
+
+// Backend-only appearance access. A valid Minecraft session is reused; renewing
+// it uses the same silent MSAL → Xbox → ownership flow as authenticated launch.
+export async function assertAppearanceAccount(id) {
+    await load();
+    if(typeof id!=='string'||!/^[a-f0-9]{32}$/i.test(id)||model.selectedId!==id)throw new Error('Minecraft account changed. Refresh this page.');
+    const account=model.accounts.find(item=>item.id===id&&item.type==='microsoft');
+    if(!account)throw new Error('Select a Microsoft account that owns Minecraft Java to manage appearance.');
+    return account;
+}
+export const getAppearanceSession = (id,force=false) => exclusive(async controller => {
+    await assertAppearanceAccount(id);
+    const current=sessions.get(id);
+    if(!force&&current?.expiresAt>Date.now()+60000)return current;
+    return refresh(id,controller,()=>{});
+});
+export const rememberMinecraftAppearance = (id,profile) => exclusive(async () => {
+    const account=await assertAppearanceAccount(id);
+    if(profile.uuid!==account.uuid)throw new Error('Minecraft returned a different profile. Refresh your account.');
+    account.username=profile.username;
+    account.skinUrl=profile.skins.find(skin=>skin.active)?.url;
+    const current=sessions.get(id);
+    if(current)sessions.set(id,{...current,username:account.username,skinUrl:account.skinUrl});
+    await save();
+});

@@ -1,3 +1,4 @@
+import { registerAppearance } from './appearanceIpc.js';
 import { toggleContent } from './contentConfig.js';
 import { registerContent, contentBusy } from './contentIpc.js';
 import { initializeUpdates, updateStatus, laterUpdate, updatePreferences, installUpdate } from './updates.js';
@@ -162,13 +163,14 @@ handle('settings:java', () => chooseJava());
 handle('settings:java-reset', () => resetJava());
 handle('settings:storage', () => chooseInstanceStorage());
 handle('settings:background', (_event, input) => setBackgroundSettings(input));
+const appearance = registerAppearance(handle);
 handle('minecraft-accounts:list', () => getMinecraftAccounts());
-handle('minecraft-accounts:login', () => loginMicrosoft(message => broadcast('minecraft-accounts:progress', message)));
+handle('minecraft-accounts:login', () => { appearance.cancel(); return loginMicrosoft(message => broadcast('minecraft-accounts:progress', message)); });
 handle('minecraft-accounts:cancel', () => cancelMicrosoftLogin());
 for (const [channel, action] of [['select', selectMinecraftAccount], ['remove', removeMinecraftAccount], ['refresh', refreshMinecraftAccount]]) {
-    handle('minecraft-accounts:' + channel, (_event, id) => { if (typeof id !== 'string' || !/^(local-)?[a-f0-9]{32}$/i.test(id)) throw new Error('Invalid Minecraft account ID.'); return action(id); });
+    handle('minecraft-accounts:' + channel, (_event, id) => { if (typeof id !== 'string' || !/^(local-)?[a-f0-9]{32}$/i.test(id)) throw new Error('Invalid Minecraft account ID.'); if(channel==='select'||channel==='remove')appearance.cancel(); return action(id); });
 }
-handle('minecraft-accounts:local', (_event, name) => addLocalAccount(name));
+handle('minecraft-accounts:local', (_event, name) => { appearance.cancel(); return addLocalAccount(name); });
 handle('minecraft:status', () => ({ state: getMinecraftState(), lastError: lastLaunchMessage, ...activeLaunch }));
 // Fixed-purpose Supabase session storage. Minecraft credentials never use this IPC.
 handle('social-session:read', () => readSecure('supabase-session'));

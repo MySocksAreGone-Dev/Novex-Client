@@ -30,6 +30,16 @@ contextBridge.exposeInMainWorld(
             read: () => ipcRenderer.invoke('social-session:read'),
             write: value => ipcRenderer.invoke('social-session:write', value)
         },
+        appearance: {
+            get:(id,force=false)=>ipcRenderer.invoke('minecraft-appearance:get',id,force),
+            choose:id=>ipcRenderer.invoke('minecraft-appearance:choose',id),
+            upload:(id,draft,model)=>ipcRenderer.invoke('minecraft-appearance:upload',id,draft,model),
+            setSkin:(id,skin,model)=>ipcRenderer.invoke('minecraft-appearance:skin',id,skin,model),
+            resetSkin:id=>ipcRenderer.invoke('minecraft-appearance:reset-skin',id),
+            setCape:(id,cape)=>ipcRenderer.invoke('minecraft-appearance:cape',id,cape),
+            disableCape:id=>ipcRenderer.invoke('minecraft-appearance:disable-cape',id),
+            deleteSaved:(id,skin)=>ipcRenderer.invoke('minecraft-appearance:delete-saved',id,skin)
+        },
         minecraftAccounts: {
             list: () => ipcRenderer.invoke('minecraft-accounts:list'),
             login: () => ipcRenderer.invoke('minecraft-accounts:login'),
