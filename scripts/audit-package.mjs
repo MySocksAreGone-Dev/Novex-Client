@@ -11,7 +11,7 @@ for(const archive of packages){
  const metadata=JSON.parse(asar.extractFile(archive,'package.json'));
  assert.equal(metadata.version,version,'Packaged version must match release source');
  for(const entry of asar.listPackage(archive)){
-  const name=entry.replace(/^\//,'');const stat=asar.statFile(archive,name);if(stat.files)continue;
+  const name=entry.replaceAll('\\','/').replace(/^\//,'');const stat=asar.statFile(archive,name);if(stat.files)continue;
   assert.ok(!/(^|\/)(?:\.env(?:\..*)?|minecraft-accounts\.json|launcher-settings\.json|instance-paths\.json|supabase-session.*|.*\.encrypted|.*\.(?:pfx|p12|pem|key))$/i.test(name),`Private file in package: ${name}`);
   if(!/\.(?:js|cjs|mjs|json|html|css|txt|md)$/i.test(name)||stat.size>4*1024*1024)continue;
   const data=asar.extractFile(archive,name).toString('utf8');
