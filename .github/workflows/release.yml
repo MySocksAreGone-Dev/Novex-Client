@@ -40,6 +40,8 @@ jobs:
           CSC_KEY_PASSWORD: ${{ secrets.CSC_KEY_PASSWORD }}
           VITE_SUPABASE_URL: ${{ vars.VITE_SUPABASE_URL }}
           VITE_SUPABASE_ANON_KEY: ${{ vars.VITE_SUPABASE_ANON_KEY }}
+      - name: Audit packaged application
+        run: node scripts/audit-package.mjs
       - uses: actions/upload-artifact@v4
         with:
           name: Novex-${{ matrix.os }}

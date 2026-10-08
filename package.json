@@ -1,7 +1,7 @@
 {
   "name": "Novex-client",
   "private": true,
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "Novex Client, a Minecraft launcher for managing and launching Minecraft instances.",
   "author": "Wild",
   "homepage": "https://github.com/MineBukserErBorte/Novex-Client",
@@ -134,5 +134,8 @@
     }
   },
   "desktopName": "novex.desktop",
-  "license": "UNLICENSED"
+  "license": "UNLICENSED",
+  "overrides": {
+    "shell-quote": "1.12.0"
+  }
 }
