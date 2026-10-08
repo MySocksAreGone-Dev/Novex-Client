@@ -1,4 +1,4 @@
-# v0.2.2 security review — 2026-10-08
+# v0.2.3 security review — 2026-10-08
 
 - Reviewed both repositories and reachable Git history (378 blobs): no privileged credential candidates found. Public Microsoft application ID and Supabase anon configuration are intentional. Test credentials are synthetic.
 - Reviewed Electron trusted-sender IPC, renderer isolation/sandbox, denied permissions, secure session storage, token-redacted logging, appearance account boundaries, archive traversal checks, verified downloads and updater artifact selection.
@@ -9,4 +9,6 @@
 - Website uses escaped static templates and local assets, has no dependencies, credentials, forms or dynamic remote HTML. Added a restrictive Content Security Policy. Existing private/cache/build ignore rules remain effective.
 - Automated regression tests cover auth, RLS, imports, downloads, filesystem boundaries, appearance and updates. Real-account skin/cape changes and Windows gameplay remain manual checks; this audit is not a penetration test or guarantee of absence of vulnerabilities. Installers remain unsigned.
 
-The v0.2.1 candidate was not published: its new archive audit did not normalize Windows paths. That check is corrected in v0.2.2; no prior tag was rewritten.
+The v0.2.1 candidate was not published: its new archive audit did not normalize Windows paths. That check is corrected in v0.2.3; no prior tag was rewritten.
+
+The v0.2.2 candidate was also stopped before publication to normalize nested paths passed to the archive API. Portable root and nested-path checks now cover both path formats.
